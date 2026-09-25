@@ -15,6 +15,10 @@ the other Abacus internal apps.
 - **Monthly Returns** — builds a CIS300 from finalised payments for a tax
   month (including nil returns), tracks status through draft → ready →
   submitted
+- **Payment & Deduction Statements** — once a payment is finalised, generate
+  the statement PDF client-side (stored in Supabase Storage under
+  `cis-statements`), download it, or email it to the subcontractor via
+  Resend (needs `RESEND_API_KEY` / `RESEND_FROM_EMAIL` set — see Setup)
 
 ## What is NOT yet working: the actual HMRC submission
 
@@ -56,6 +60,14 @@ that the credentials/schema aren't configured yet rather than fail silently.
    Pages, same as your other apps.
 4. Create your own Supabase Auth user(s) to sign in with, and add a row to
    `cis_user_roles` for each (role `staff` or `admin`).
+5. To enable emailing statements, set these as environment secrets in
+   Cloudflare Pages:
+   - `RESEND_API_KEY`
+   - `RESEND_FROM_EMAIL` (e.g. `Abacus Consultancy <cis@abacusconsultancy.co.uk>`)
+   - `SUPABASE_URL`
+   - `SUPABASE_SERVICE_ROLE_KEY`
+   Without these, "Generate statement" and "Download" still work — only
+   "Email" needs them.
 
 ## Database
 
@@ -66,7 +78,5 @@ All tables are prefixed `cis_` in the TeamSpirits Supabase project:
 
 ## Not yet built
 
-- Payment & Deduction Statement PDF generation/emailing (statements table
-  exists; generation isn't wired up yet)
 - CSV import for subcontractors
 - Corrections/reopening a finalised month

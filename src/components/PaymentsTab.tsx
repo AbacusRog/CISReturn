@@ -1,19 +1,30 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import type { Payment, Subcontractor } from '../types/cis'
+import type { Contractor, Payment, Subcontractor } from '../types/cis'
 import { calculateDeduction } from '../utils/cisCalc'
 import { currentTaxMonthStart, formatTaxMonthLabel, toISODate, previousTaxMonths } from '../utils/taxMonth'
+import StatementCell from './StatementCell'
 
 export default function PaymentsTab({ contractorId }: { contractorId: string }) {
   const navigate = useNavigate()
   const months = previousTaxMonths(6)
   const [selectedMonth, setSelectedMonth] = useState(toISODate(currentTaxMonthStart()))
+  const [contractor, setContractor] = useState<Contractor | null>(null)
   const [subcontractors, setSubcontractors] = useState<Subcontractor[]>([])
   const [payments, setPayments] = useState<Record<string, Payment>>({})
   const [draft, setDraft] = useState<Record<string, { gross: string; materials: string }>>({})
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    supabase
+      .from('cis_contractors')
+      .select('*')
+      .eq('id', contractorId)
+      .single()
+      .then(({ data }) => setContractor(data as Contractor))
+  }, [contractorId])
 
   const load = async () => {
     setLoading(true)
@@ -175,6 +186,7 @@ export default function PaymentsTab({ contractorId }: { contractorId: string }) 
               <th className="px-4 py-2">Deduction (£)</th>
               <th className="px-4 py-2">Net (£)</th>
               <th className="px-4 py-2"></th>
+              <th className="px-4 py-2">Statement</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
@@ -187,7 +199,8 @@ export default function PaymentsTab({ contractorId }: { contractorId: string }) 
                 materials,
                 s.deduction_rate,
               )
-              const finalised = payments[s.id]?.finalised
+              const paymentRow = payments[s.id]
+              const finalised = paymentRow?.finalised
               return (
                 <tr key={s.id}>
                   <td className="px-4 py-2 font-medium text-slate-900">{s.business_name}</td>
@@ -228,6 +241,13 @@ export default function PaymentsTab({ contractorId }: { contractorId: string }) 
                       >
                         Save
                       </button>
+                    )}
+                  </td>
+                  <td className="px-4 py-2">
+                    {finalised && contractor && paymentRow ? (
+                      <StatementCell contractor={contractor} subcontractor={s} payment={paymentRow} />
+                    ) : (
+                      <span className="text-xs text-slate-300">—</span>
                     )}
                   </td>
                 </tr>
