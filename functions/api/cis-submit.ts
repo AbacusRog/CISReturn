@@ -1,18 +1,18 @@
 // Cloudflare Pages Function: submits a CIS300 monthly return to HMRC.
 //
-// Same caveat as cis-verify.ts: this is a structural scaffold, not a
-// tested integration. Before this can actually send a return to HMRC:
+// See cis-verify.ts for the full picture of what's confirmed vs. still
+// missing — same envelope/endpoints, same gap (the CIS300 body schema
+// itself isn't public; it comes from HMRC's Software Developer Support
+// team on registration). Two things specific to this function:
 //
-//   1. Confirm the exact CIS300 XML schema (IRenvelope body, required
-//      fields, nil-return / inactivity-indicator flags) against HMRC's
-//      current CIS Online specification and test it in their test
-//      gateway first — is_sandbox on cis_monthly_returns exists so drafts
-//      default to sandbox and nothing reaches the live gateway by accident.
-//   2. Store your agent Government Gateway credentials as Cloudflare
-//      secrets (see cis-verify.ts for the required env vars).
-//   3. Handle HMRC's asynchronous polling pattern if the gateway responds
-//      with "the request is being processed, poll this URL" rather than
-//      an immediate result — the GovTalk protocol supports both.
+//   - It previously built a GovTalkMessage with no SenderDetails block at
+//     all, i.e. it never actually authenticated. Fixed below to match the
+//     credentials block used in cis-verify.ts.
+//   - HMRC's Transaction Engine protocol supports an asynchronous
+//     "poll this URL" response for some services, rather than an
+//     immediate result. This function assumes an immediate response;
+//     if HMRC's real response is a poll redirect, this needs extending
+//     to call GET on the poll endpoint until a final result comes back.
 //
 // This function reads the return + its persisted line snapshot from
 // Supabase (cis_return_lines), builds the CIS300 XML, submits it, and
@@ -22,6 +22,7 @@ interface Env {
   HMRC_GATEWAY_URL: string
   HMRC_SENDER_ID: string
   HMRC_SENDER_PASSWORD: string
+  HMRC_GATEWAY_TEST: string
   SUPABASE_URL: string
   SUPABASE_SERVICE_ROLE_KEY: string
 }
@@ -55,15 +56,15 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
   }
 
   const [returnRes] = await Promise.all([
-    fetch(`${env.SUPABASE_URL}/rest/v1/cis_monthly_returns?id=eq.${monthlyReturnId}&select=*`, { headers }),
+    fetch(`${env.SUPABASE_URL.replace(/\/+$/, "")}/rest/v1/cis_monthly_returns?id=eq.${monthlyReturnId}&select=*`, { headers }),
   ])
   const returns = await returnRes.json()
   const monthlyReturn = returns?.[0]
   if (!monthlyReturn) return json({ error: 'Monthly return not found' }, 404)
 
   const [contractorRes, linesRes] = await Promise.all([
-    fetch(`${env.SUPABASE_URL}/rest/v1/cis_contractors?id=eq.${monthlyReturn.contractor_id}&select=*`, { headers }),
-    fetch(`${env.SUPABASE_URL}/rest/v1/cis_return_lines?monthly_return_id=eq.${monthlyReturnId}&select=*`, { headers }),
+    fetch(`${env.SUPABASE_URL.replace(/\/+$/, "")}/rest/v1/cis_contractors?id=eq.${monthlyReturn.contractor_id}&select=*`, { headers }),
+    fetch(`${env.SUPABASE_URL.replace(/\/+$/, "")}/rest/v1/cis_return_lines?monthly_return_id=eq.${monthlyReturnId}&select=*`, { headers }),
   ])
   const contractors = await contractorRes.json()
   const lines = await linesRes.json()
@@ -71,7 +72,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
   if (!contractor) return json({ error: 'Contractor not found' }, 404)
 
   try {
-    const xml = buildCis300Xml({ contractor, monthlyReturn, lines })
+    const xml = buildCis300Xml({ contractor, monthlyReturn, lines, env })
     const response = await fetch(env.HMRC_GATEWAY_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/xml' },
@@ -94,7 +95,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
   }
 }
 
-function buildCis300Xml({ contractor, monthlyReturn, lines }: any): string {
+function buildCis300Xml({ contractor, monthlyReturn, lines, env }: any): string {
   const subcontractorBlocks = (lines ?? [])
     .map(
       (l: any) => `
@@ -110,6 +111,8 @@ function buildCis300Xml({ contractor, monthlyReturn, lines }: any): string {
     )
     .join('')
 
+  const isTest = env.HMRC_GATEWAY_TEST === '1'
+
   return `<?xml version="1.0" encoding="UTF-8"?>
 <GovTalkMessage xmlns="http://www.govtalk.gov.uk/CM/envelope">
   <EnvelopeVersion>2.0</EnvelopeVersion>
@@ -118,7 +121,19 @@ function buildCis300Xml({ contractor, monthlyReturn, lines }: any): string {
       <Class>HMRC-CIS-CIS300-CIS</Class>
       <Qualifier>request</Qualifier>
       <Function>submit</Function>
+      <TransactionID></TransactionID>
+      <CorrelationID></CorrelationID>
+      ${isTest ? '<GatewayTest>1</GatewayTest>' : ''}
     </MessageDetails>
+    <SenderDetails>
+      <IDAuthentication>
+        <SenderID>${env.HMRC_SENDER_ID}</SenderID>
+        <Authentication>
+          <Method>clear</Method>
+          <Value>${env.HMRC_SENDER_PASSWORD}</Value>
+        </Authentication>
+      </IDAuthentication>
+    </SenderDetails>
   </Header>
   <GovTalkDetails>
     <Keys>

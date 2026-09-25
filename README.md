@@ -22,32 +22,53 @@ the other Abacus internal apps.
 
 ## What is NOT yet working: the actual HMRC submission
 
-`functions/api/cis-verify.ts` and `functions/api/cis-submit.ts` are **structural
-scaffolds**, not tested integrations. HMRC's CIS service (subcontractor
-verification and CIS300 submission) is one of the older GovTalk/XML government
-gateway services — not the newer OAuth/REST APIs used for VAT or Income Tax
-MTD. Before either function will actually talk to HMRC, you need to:
+`functions/api/cis-verify.ts` and `functions/api/cis-submit.ts` build and
+send a real GovTalk XML envelope now (confirmed against HMRC's public
+"Transaction Engine: Document Submission Protocol"), but the **body content
+specific to CIS** (the actual verification/CIS300 fields) is still a
+placeholder, because HMRC does not publish that schema openly.
 
-1. Get the current CIS Online service documentation and the Government
-   Gateway XML submission protocol details (the exact GovTalkMessage
-   envelope, IRheader, and CIS body schema) from HMRC's Developer Hub / CIS
-   Quality Standard documentation, and confirm the XML shape against it —
-   what's in these files is a reasonable approximation, not a verified
-   message.
-2. Set your agent's Government Gateway credentials as **environment
-   secrets** in Cloudflare Pages (never commit them):
-   - `HMRC_GATEWAY_URL`
-   - `HMRC_SENDER_ID`
-   - `HMRC_SENDER_PASSWORD`
-   - `SUPABASE_URL`
-   - `SUPABASE_SERVICE_ROLE_KEY`
-3. Test everything against HMRC's test gateway before it ever reaches the
-   live endpoint. `cis_monthly_returns.is_sandbox` defaults to `true` so
-   nothing goes live by accident.
+**Confirmed facts** (from HMRC's public documentation):
+- Submission endpoints: test
+  `https://test-transaction-engine.tax.service.gov.uk/submission`, live
+  `https://transaction-engine.tax.service.gov.uk/submission`.
+- Credentials are a Government Gateway SenderID + password, sent inside the
+  GovTalkMessage envelope (not OAuth, unlike VAT/MTD).
+- A `GatewayTest` flag distinguishes test traffic from live.
+- An older CIS "Electronic Data Interchange" (EDI) spec was withdrawn by
+  HMRC in 2019 — that's a different, older technology than the GovTalk/XML
+  gateway used here, so it doesn't mean this route is dead, but it's a sign
+  these things move and are worth confirming directly with HMRC rather than
+  trusting an old PDF.
 
-Until then, the app is fully usable for tracking subcontractors, payments,
-statements and building returns — the "Submit to HMRC" button will report
-that the credentials/schema aren't configured yet rather than fail silently.
+**What you actually need to do next** — this isn't a "read more docs"
+problem, the remaining piece isn't publicly published:
+1. Register as a software developer with HMRC's **Software Developer
+   Support (SDS)** team (via the Developer Hub, or by contacting them
+   directly) to get a Vendor ID.
+2. They'll issue test Government Gateway credentials, the real CIS
+   verification/CIS300 request-response schema, and sample test-scenario
+   files.
+3. Build against those, submit the test scenarios, and HMRC confirms your
+   software as "recognised" — normally about 10 working days once your test
+   files are valid.
+4. Only then switch `HMRC_GATEWAY_URL` to the live endpoint and drop
+   `HMRC_GATEWAY_TEST`.
+
+Set your agent's credentials as **environment secrets** in Cloudflare Pages
+(never commit them):
+- `HMRC_GATEWAY_URL` (test or live URL above)
+- `HMRC_SENDER_ID`
+- `HMRC_SENDER_PASSWORD`
+- `HMRC_GATEWAY_TEST` (`1` while testing; unset once live)
+- `SUPABASE_URL`
+- `SUPABASE_SERVICE_ROLE_KEY`
+
+`cis_monthly_returns.is_sandbox` defaults to `true` so nothing is flagged as
+a live submission by accident even once this is wired up. Until SDS
+registration is done, the app is fully usable for tracking subcontractors,
+payments, statements and building returns — the "Submit to HMRC" button
+will report plainly that credentials aren't configured yet.
 
 ## Setup
 

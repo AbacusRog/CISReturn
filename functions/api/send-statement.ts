@@ -47,13 +47,18 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     )
   }
 
+  // Strip a trailing slash so "https://x.supabase.co/" doesn't produce a
+  // double slash before "/rest/v1/..." — PostgREST rejects that with a
+  // confusing "Invalid path specified in request URL" (PGRST125).
+  const supabaseUrl = env.SUPABASE_URL.replace(/\/+$/, '')
+
   const headers = {
     apikey: env.SUPABASE_SERVICE_ROLE_KEY,
     Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
   }
 
   const statement = await fetchOneOrThrow(
-    `${env.SUPABASE_URL}/rest/v1/cis_statements?id=eq.${statementId}&select=*`,
+    `${supabaseUrl}/rest/v1/cis_statements?id=eq.${statementId}&select=*`,
     headers,
     'statement',
   )
@@ -61,7 +66,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
   if (!statement.row?.pdf_path) return json({ error: 'Statement or its PDF not found' }, 404)
 
   const payment = await fetchOneOrThrow(
-    `${env.SUPABASE_URL}/rest/v1/cis_payments?id=eq.${statement.row.payment_id}&select=*`,
+    `${supabaseUrl}/rest/v1/cis_payments?id=eq.${statement.row.payment_id}&select=*`,
     headers,
     'payment',
   )
@@ -69,7 +74,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
   if (!payment.row) return json({ error: 'Payment not found' }, 404)
 
   const subcontractorResult = await fetchOneOrThrow(
-    `${env.SUPABASE_URL}/rest/v1/cis_subcontractors?id=eq.${payment.row.subcontractor_id}&select=*`,
+    `${supabaseUrl}/rest/v1/cis_subcontractors?id=eq.${payment.row.subcontractor_id}&select=*`,
     headers,
     'subcontractor',
   )
@@ -78,7 +83,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
   if (!subcontractor?.email) return json({ error: 'Subcontractor has no email address on file' }, 400)
 
   const contractorResult = await fetchOneOrThrow(
-    `${env.SUPABASE_URL}/rest/v1/cis_contractors?id=eq.${payment.row.contractor_id}&select=*`,
+    `${supabaseUrl}/rest/v1/cis_contractors?id=eq.${payment.row.contractor_id}&select=*`,
     headers,
     'contractor',
   )
@@ -87,7 +92,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
 
   // Download the PDF from Supabase Storage
   const pdfRes = await fetch(
-    `${env.SUPABASE_URL}/storage/v1/object/cis-statements/${statement.row.pdf_path}`,
+    `${supabaseUrl}/storage/v1/object/cis-statements/${statement.row.pdf_path}`,
     { headers },
   )
   if (!pdfRes.ok) {
