@@ -2,43 +2,18 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import type { Contractor, Payment, Subcontractor } from '../types/cis'
-import { calculatePayment } from '../utils/cisCalc'
-import {
-  currentTaxMonthStart,
-  formatTaxMonthLabel,
-  toISODate,
-  previousTaxMonths,
-  taxYearStart,
-} from '../utils/taxMonth'
+import { calculateDeduction } from '../utils/cisCalc'
+import { currentTaxMonthStart, formatTaxMonthLabel, toISODate, previousTaxMonths } from '../utils/taxMonth'
 import StatementCell from './StatementCell'
-
-interface DraftRow {
-  basicPay: string
-  materials: string
-  materialsOnTop: boolean
-  vat: string
-}
-
-const emptyDraftRow: DraftRow = { basicPay: '', materials: '', materialsOnTop: true, vat: '' }
-
-interface YtdTotals {
-  gross: number
-  materials: number
-  deduction: number
-  vat: number
-  net: number
-}
 
 export default function PaymentsTab({ contractorId }: { contractorId: string }) {
   const navigate = useNavigate()
-  const months = previousTaxMonths(12)
+  const months = previousTaxMonths(6)
   const [selectedMonth, setSelectedMonth] = useState(toISODate(currentTaxMonthStart()))
-  const [view, setView] = useState<'period' | 'ytd'>('period')
   const [contractor, setContractor] = useState<Contractor | null>(null)
   const [subcontractors, setSubcontractors] = useState<Subcontractor[]>([])
   const [payments, setPayments] = useState<Record<string, Payment>>({})
-  const [draft, setDraft] = useState<Record<string, DraftRow>>({})
-  const [ytdTotals, setYtdTotals] = useState<Record<string, YtdTotals>>({})
+  const [draft, setDraft] = useState<Record<string, { gross: string; materials: string }>>({})
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
 
@@ -70,42 +45,16 @@ export default function PaymentsTab({ contractorId }: { contractorId: string }) 
     const map: Record<string, Payment> = {}
     for (const p of (pays as Payment[]) ?? []) map[p.subcontractor_id] = p
     setPayments(map)
-    const nextDraft: Record<string, DraftRow> = {}
+    const nextDraft: Record<string, { gross: string; materials: string }> = {}
     for (const s of (subs as Subcontractor[]) ?? []) {
       const existing = map[s.id]
-      nextDraft[s.id] = existing
-        ? {
-            basicPay: String(existing.basic_pay),
-            materials: String(existing.materials_amount),
-            materialsOnTop: existing.materials_on_top,
-            vat: String(existing.vat_amount),
-          }
-        : { ...emptyDraftRow }
+      nextDraft[s.id] = {
+        gross: existing ? String(existing.gross_amount) : '',
+        materials: existing ? String(existing.materials_amount) : '',
+      }
     }
     setDraft(nextDraft)
     setLoading(false)
-
-    // Year-to-date sums, computed from all finalised payments in the tax
-    // year containing the selected month, up to and including that month.
-    const yearStart = toISODate(taxYearStart(new Date(selectedMonth)))
-    const { data: yearPayments } = await supabase
-      .from('cis_payments')
-      .select('*')
-      .eq('contractor_id', contractorId)
-      .eq('finalised', true)
-      .gte('tax_month_start', yearStart)
-      .lte('tax_month_start', selectedMonth)
-    const totals: Record<string, YtdTotals> = {}
-    for (const p of (yearPayments as Payment[]) ?? []) {
-      const t = totals[p.subcontractor_id] ?? { gross: 0, materials: 0, deduction: 0, vat: 0, net: 0 }
-      t.gross += Number(p.gross_amount)
-      t.materials += Number(p.materials_amount)
-      t.deduction += Number(p.deduction_amount)
-      t.vat += Number(p.vat_amount)
-      t.net += Number(p.net_amount)
-      totals[p.subcontractor_id] = t
-    }
-    setYtdTotals(totals)
   }
 
   useEffect(() => {
@@ -113,28 +62,22 @@ export default function PaymentsTab({ contractorId }: { contractorId: string }) 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [contractorId, selectedMonth])
 
-  const calcFor = (s: Subcontractor, row: DraftRow) =>
-    calculatePayment({
-      basicPay: parseFloat(row.basicPay || '0') || 0,
-      materialsAmount: parseFloat(row.materials || '0') || 0,
-      materialsOnTop: row.materialsOnTop,
-      vatAmount: s.vat_registered ? parseFloat(row.vat || '0') || 0 : 0,
-      deductionRate: s.deduction_rate,
-    })
-
   const handleSaveRow = async (subcontractor: Subcontractor) => {
-    const row = draft[subcontractor.id] ?? emptyDraftRow
-    const { totalGross, deductionAmount, netAmount } = calcFor(subcontractor, row)
+    const row = draft[subcontractor.id]
+    const gross = parseFloat(row?.gross || '0') || 0
+    const materials = parseFloat(row?.materials || '0') || 0
+    const { deductionAmount, netAmount } = calculateDeduction(
+      gross,
+      materials,
+      subcontractor.deduction_rate,
+    )
     const existing = payments[subcontractor.id]
     const payload = {
       contractor_id: contractorId,
       subcontractor_id: subcontractor.id,
       tax_month_start: selectedMonth,
-      basic_pay: parseFloat(row.basicPay || '0') || 0,
-      materials_amount: parseFloat(row.materials || '0') || 0,
-      materials_on_top: row.materialsOnTop,
-      vat_amount: subcontractor.vat_registered ? parseFloat(row.vat || '0') || 0 : 0,
-      gross_amount: totalGross,
+      gross_amount: gross,
+      materials_amount: materials,
       deduction_rate: subcontractor.deduction_rate,
       deduction_amount: deductionAmount,
       net_amount: netAmount,
@@ -166,8 +109,7 @@ export default function PaymentsTab({ contractorId }: { contractorId: string }) 
   const finalisedCount = Object.values(payments).filter((p) => p.finalised).length
   const totalPayable = subcontractors.reduce((sum, s) => {
     const row = draft[s.id]
-    if (!row) return sum
-    return sum + calcFor(s, row).totalGross
+    return sum + (parseFloat(row?.gross || '0') || 0)
   }, 0)
 
   const handleCreateReturn = async () => {
@@ -175,7 +117,7 @@ export default function PaymentsTab({ contractorId }: { contractorId: string }) 
     // Finalise any payments with amounts entered for this month
     const toFinalise = subcontractors.filter((s) => {
       const row = draft[s.id]
-      return row && calcFor(s, row).totalGross > 0
+      return (parseFloat(row?.gross || '0') || 0) > 0
     })
     for (const s of toFinalise) {
       const existing = payments[s.id]
@@ -223,33 +165,17 @@ export default function PaymentsTab({ contractorId }: { contractorId: string }) 
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-3">
-          <select
-            value={selectedMonth}
-            onChange={(e) => setSelectedMonth(e.target.value)}
-            className="rounded border border-slate-300 px-2 py-1.5 text-sm"
-          >
-            {months.map((m) => (
-              <option key={toISODate(m)} value={toISODate(m)}>
-                {formatTaxMonthLabel(m)}
-              </option>
-            ))}
-          </select>
-          <div className="flex rounded border border-slate-300 overflow-hidden text-sm">
-            <button
-              onClick={() => setView('period')}
-              className={`px-3 py-1.5 ${view === 'period' ? 'bg-slate-900 text-white' : 'bg-white text-slate-600'}`}
-            >
-              This period
-            </button>
-            <button
-              onClick={() => setView('ytd')}
-              className={`px-3 py-1.5 ${view === 'ytd' ? 'bg-slate-900 text-white' : 'bg-white text-slate-600'}`}
-            >
-              Year to date
-            </button>
-          </div>
-        </div>
+        <select
+          value={selectedMonth}
+          onChange={(e) => setSelectedMonth(e.target.value)}
+          className="rounded border border-slate-300 px-2 py-1.5 text-sm"
+        >
+          {months.map((m) => (
+            <option key={toISODate(m)} value={toISODate(m)}>
+              {formatTaxMonthLabel(m)}
+            </option>
+          ))}
+        </select>
         <button
           onClick={handleCreateReturn}
           disabled={saving || loading}
@@ -265,42 +191,13 @@ export default function PaymentsTab({ contractorId }: { contractorId: string }) 
         <div className="text-sm text-slate-400">
           Add subcontractors first before entering payments.
         </div>
-      ) : view === 'ytd' ? (
+      ) : (
         <table className="w-full bg-white border border-slate-200 rounded-lg overflow-hidden text-sm">
           <thead className="bg-slate-50 text-xs text-slate-500 text-left">
             <tr>
               <th className="px-4 py-2">Subcontractor</th>
               <th className="px-4 py-2">Gross (£)</th>
               <th className="px-4 py-2">Materials (£)</th>
-              <th className="px-4 py-2">Deduction (£)</th>
-              <th className="px-4 py-2">VAT (£)</th>
-              <th className="px-4 py-2">Net (£)</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {subcontractors.map((s) => {
-              const t = ytdTotals[s.id] ?? { gross: 0, materials: 0, deduction: 0, vat: 0, net: 0 }
-              return (
-                <tr key={s.id}>
-                  <td className="px-4 py-2 font-medium text-slate-900">{s.business_name}</td>
-                  <td className="px-4 py-2 text-slate-600">{t.gross.toFixed(2)}</td>
-                  <td className="px-4 py-2 text-slate-600">{t.materials.toFixed(2)}</td>
-                  <td className="px-4 py-2 text-slate-600">{t.deduction.toFixed(2)}</td>
-                  <td className="px-4 py-2 text-slate-600">{t.vat.toFixed(2)}</td>
-                  <td className="px-4 py-2 text-slate-900 font-medium">{t.net.toFixed(2)}</td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
-      ) : (
-        <table className="w-full bg-white border border-slate-200 rounded-lg overflow-hidden text-sm">
-          <thead className="bg-slate-50 text-xs text-slate-500 text-left">
-            <tr>
-              <th className="px-4 py-2">Subcontractor</th>
-              <th className="px-4 py-2">Basic pay (£)</th>
-              <th className="px-4 py-2">Materials (£)</th>
-              <th className="px-4 py-2">VAT (£)</th>
               <th className="px-4 py-2">Rate</th>
               <th className="px-4 py-2">Deduction (£)</th>
               <th className="px-4 py-2">Net (£)</th>
@@ -310,8 +207,14 @@ export default function PaymentsTab({ contractorId }: { contractorId: string }) 
           </thead>
           <tbody className="divide-y divide-slate-100">
             {subcontractors.map((s) => {
-              const row = draft[s.id] ?? emptyDraftRow
-              const { deductionAmount, netAmount } = calcFor(s, row)
+              const row = draft[s.id] ?? { gross: '', materials: '' }
+              const gross = parseFloat(row.gross || '0') || 0
+              const materials = parseFloat(row.materials || '0') || 0
+              const { deductionAmount, netAmount } = calculateDeduction(
+                gross,
+                materials,
+                s.deduction_rate,
+              )
               const paymentRow = payments[s.id]
               const finalised = paymentRow?.finalised
               return (
@@ -322,56 +225,24 @@ export default function PaymentsTab({ contractorId }: { contractorId: string }) 
                       type="number"
                       step="0.01"
                       disabled={finalised}
-                      value={row.basicPay}
+                      value={row.gross}
                       onChange={(e) =>
-                        setDraft({ ...draft, [s.id]: { ...row, basicPay: e.target.value } })
+                        setDraft({ ...draft, [s.id]: { ...row, gross: e.target.value } })
                       }
                       className="w-24 rounded border border-slate-300 px-2 py-1 text-sm disabled:bg-slate-50"
                     />
                   </td>
                   <td className="px-4 py-2">
-                    <div className="flex flex-col gap-1">
-                      <input
-                        type="number"
-                        step="0.01"
-                        disabled={finalised}
-                        value={row.materials}
-                        onChange={(e) =>
-                          setDraft({ ...draft, [s.id]: { ...row, materials: e.target.value } })
-                        }
-                        className="w-24 rounded border border-slate-300 px-2 py-1 text-sm disabled:bg-slate-50"
-                      />
-                      <label className="flex items-center gap-1 text-[11px] text-slate-400">
-                        <input
-                          type="checkbox"
-                          disabled={finalised}
-                          checked={row.materialsOnTop}
-                          onChange={(e) =>
-                            setDraft({
-                              ...draft,
-                              [s.id]: { ...row, materialsOnTop: e.target.checked },
-                            })
-                          }
-                        />
-                        Added to basic
-                      </label>
-                    </div>
-                  </td>
-                  <td className="px-4 py-2">
-                    {s.vat_registered ? (
-                      <input
-                        type="number"
-                        step="0.01"
-                        disabled={finalised}
-                        value={row.vat}
-                        onChange={(e) =>
-                          setDraft({ ...draft, [s.id]: { ...row, vat: e.target.value } })
-                        }
-                        className="w-20 rounded border border-slate-300 px-2 py-1 text-sm disabled:bg-slate-50"
-                      />
-                    ) : (
-                      <span className="text-xs text-slate-300">Not VAT reg.</span>
-                    )}
+                    <input
+                      type="number"
+                      step="0.01"
+                      disabled={finalised}
+                      value={row.materials}
+                      onChange={(e) =>
+                        setDraft({ ...draft, [s.id]: { ...row, materials: e.target.value } })
+                      }
+                      className="w-24 rounded border border-slate-300 px-2 py-1 text-sm disabled:bg-slate-50"
+                    />
                   </td>
                   <td className="px-4 py-2 text-slate-600">{s.deduction_rate}%</td>
                   <td className="px-4 py-2 text-slate-600">{deductionAmount.toFixed(2)}</td>
@@ -410,12 +281,10 @@ export default function PaymentsTab({ contractorId }: { contractorId: string }) 
         </table>
       )}
 
-      {view === 'period' && (
-        <div className="mt-3 text-xs text-slate-400">
-          {finalisedCount} of {subcontractors.length} finalised for this month · Total gross £
-          {totalPayable.toFixed(2)}
-        </div>
-      )}
+      <div className="mt-3 text-xs text-slate-400">
+        {finalisedCount} of {subcontractors.length} finalised for this month · Total gross £
+        {totalPayable.toFixed(2)}
+      </div>
     </div>
   )
 }

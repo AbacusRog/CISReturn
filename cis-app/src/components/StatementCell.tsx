@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import type { Contractor, Payment, Subcontractor } from '../types/cis'
 import { buildStatementPdf } from '../utils/statementPdf'
-import { taxYearStart, toISODate } from '../utils/taxMonth'
 
 interface Props {
   contractor: Contractor
@@ -52,25 +51,7 @@ export default function StatementCell({ contractor, subcontractor, payment }: Pr
     setError(null)
     setJustGenerated(false)
     try {
-      const yearStart = toISODate(taxYearStart(new Date(payment.tax_month_start)))
-      const { data: yearPayments } = await supabase
-        .from('cis_payments')
-        .select('*')
-        .eq('subcontractor_id', subcontractor.id)
-        .eq('finalised', true)
-        .gte('tax_month_start', yearStart)
-        .lte('tax_month_start', payment.tax_month_start)
-      const ytd = ((yearPayments as Payment[]) ?? []).reduce(
-        (acc, p) => ({
-          gross: acc.gross + Number(p.gross_amount),
-          materials: acc.materials + Number(p.materials_amount),
-          deduction: acc.deduction + Number(p.deduction_amount),
-          vat: acc.vat + Number(p.vat_amount),
-          net: acc.net + Number(p.net_amount),
-        }),
-        { gross: 0, materials: 0, deduction: 0, vat: 0, net: 0 },
-      )
-      const pdfBytes = await buildStatementPdf(contractor, subcontractor, payment, ytd)
+      const pdfBytes = await buildStatementPdf(contractor, subcontractor, payment)
       const path = pdfPath()
       const { error: uploadError } = await supabase.storage
         .from('cis-statements')

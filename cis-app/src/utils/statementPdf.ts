@@ -2,26 +2,14 @@ import { PDFDocument, StandardFonts, rgb } from 'pdf-lib'
 import type { Contractor, Subcontractor, Payment } from '../types/cis'
 import { formatTaxMonthLabel } from './taxMonth'
 
-export interface YtdTotals {
-  gross: number
-  materials: number
-  deduction: number
-  vat: number
-  net: number
-}
-
 // Builds a Payment & Deduction Statement PDF for a single subcontractor
 // payment, per HMRC's CIS requirement that every subcontractor paid under
 // deduction be given a statement showing gross payment, cost of materials,
-// and the amount deducted. An optional year-to-date total (accumulated from
-// the start of the CIS tax year to and including this payment) is shown
-// alongside the this-period figures, matching how payslip-style CIS tools
-// present both views.
+// and the amount deducted.
 export async function buildStatementPdf(
   contractor: Contractor,
   subcontractor: Subcontractor,
   payment: Payment,
-  ytd?: YtdTotals,
 ): Promise<Uint8Array> {
   const doc = await PDFDocument.create()
   const page = doc.addPage([595.28, 841.89]) // A4
@@ -76,24 +64,13 @@ export async function buildStatementPdf(
   )
   y -= 34
 
-  const taxableAmount = payment.materials_on_top
-    ? payment.basic_pay
-    : Math.max(0, payment.basic_pay - payment.materials_amount)
-
   const rows: [string, string][] = [
-    ['Basic pay (labour)', formatMoney(payment.basic_pay)],
-    [
-      payment.materials_on_top ? 'Plus cost of materials' : 'Of which, cost of materials',
-      formatMoney(payment.materials_amount),
-    ],
-    ['Amount liable to deduction', formatMoney(taxableAmount)],
-    [`Deduction made (${payment.deduction_rate}%)`, formatMoney(payment.deduction_amount)],
     ['Gross amount paid', formatMoney(payment.gross_amount)],
+    ['Less cost of materials', formatMoney(payment.materials_amount)],
+    ['Amount liable to deduction', formatMoney(payment.gross_amount - payment.materials_amount)],
+    [`Deduction made (${payment.deduction_rate}%)`, formatMoney(payment.deduction_amount)],
+    ['Net amount paid', formatMoney(payment.net_amount)],
   ]
-  if (subcontractor.vat_registered) {
-    rows.push(['VAT', formatMoney(payment.vat_amount)])
-  }
-  rows.push(['Net amount paid', formatMoney(payment.net_amount)])
 
   page.drawLine({
     start: { x: margin, y: y + 10 },
@@ -102,41 +79,13 @@ export async function buildStatementPdf(
     color: rgb(0.8, 0.8, 0.8),
   })
 
-  drawText('This period', 400, 10, bold, rgb(0.4, 0.4, 0.4))
-  y -= 4
-
   for (const [label, value] of rows) {
     y -= 22
     drawText(label, margin, 11)
     drawText(value, 400, 11, label.startsWith('Net') ? bold : font)
   }
 
-  if (ytd) {
-    y -= 20
-    page.drawLine({
-      start: { x: margin, y: y + 10 },
-      end: { x: 545, y: y + 10 },
-      thickness: 0.5,
-      color: rgb(0.8, 0.8, 0.8),
-    })
-    y -= 14
-    drawText('Year to date', margin, 11, bold)
-    y -= 22
-    const ytdRows: [string, string][] = [
-      ['Gross amount paid', formatMoney(ytd.gross)],
-      ['Cost of materials', formatMoney(ytd.materials)],
-      ['Deduction made', formatMoney(ytd.deduction)],
-    ]
-    if (subcontractor.vat_registered) ytdRows.push(['VAT', formatMoney(ytd.vat)])
-    ytdRows.push(['Net amount paid', formatMoney(ytd.net)])
-    for (const [label, value] of ytdRows) {
-      drawText(label, margin, 11)
-      drawText(value, 400, 11, label.startsWith('Net') ? bold : font)
-      y -= 22
-    }
-  }
-
-  y -= 20
+  y -= 40
   drawText(
     'This statement is issued in accordance with the Construction Industry Scheme.',
     margin,

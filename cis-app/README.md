@@ -8,26 +8,17 @@ the other Abacus internal apps.
 ## What's built
 
 - **Contractors** — the contractor clients Abacus acts as agent for
-- **Subcontractors** — per contractor, with registered details, VAT
-  registration status, and a "Verify with HMRC" action. Can also be bulk
-  added via **CSV import** (with a downloadable template) instead of
-  entering them one at a time
-- **Payments** — monthly basic pay / materials / VAT / deduction entry per
-  subcontractor, with the tax-month-based due dates CIS uses (6th–5th).
-  Materials can either be added on top of basic pay or already be included
-  in it (a toggle per row); VAT is only shown for subcontractors flagged as
-  VAT registered, and is added to the net payment without affecting the CIS
-  deduction. A **This period / Year to date** switch shows cumulative
-  gross/materials/deduction/VAT/net totals for each subcontractor across the
-  current CIS tax year (6 April–5 April)
+- **Subcontractors** — per contractor, with registered details and a "Verify
+  with HMRC" action
+- **Payments** — monthly gross/materials/deduction entry per subcontractor,
+  with the tax-month-based due dates CIS uses (6th–5th)
 - **Monthly Returns** — builds a CIS300 from finalised payments for a tax
   month (including nil returns), tracks status through draft → ready →
   submitted
 - **Payment & Deduction Statements** — once a payment is finalised, generate
   the statement PDF client-side (stored in Supabase Storage under
   `cis-statements`), download it, or email it to the subcontractor via
-  Resend (needs `RESEND_API_KEY` / `RESEND_FROM_EMAIL` set — see Setup). Each
-  statement shows both the period's figures and a year-to-date summary
+  Resend (needs `RESEND_API_KEY` / `RESEND_FROM_EMAIL` set — see Setup)
 
 ## What is NOT yet working: the actual HMRC submission
 
@@ -108,5 +99,5 @@ All tables are prefixed `cis_` in the TeamSpirits Supabase project:
 
 ## Not yet built
 
-- Nothing outstanding on the CIS workflow itself — remaining work is the
-  HMRC SDS registration/schema piece described above
+- CSV import for subcontractors
+- Corrections/reopening a finalised month

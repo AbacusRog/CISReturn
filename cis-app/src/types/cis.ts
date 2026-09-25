@@ -42,7 +42,6 @@ export interface Subcontractor {
   verification_number: string | null
   verification_status: VerificationStatus
   verified_at: string | null
-  vat_registered: boolean
   active: boolean
   notes: string | null
   created_at: string
@@ -54,11 +53,8 @@ export interface Payment {
   contractor_id: string
   subcontractor_id: string
   tax_month_start: string
-  basic_pay: number
-  materials_amount: number
-  materials_on_top: boolean
-  vat_amount: number
   gross_amount: number
+  materials_amount: number
   deduction_rate: DeductionRate
   deduction_amount: number
   net_amount: number

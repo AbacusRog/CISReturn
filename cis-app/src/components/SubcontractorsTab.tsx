@@ -1,7 +1,6 @@
-import { useEffect, useRef, useState, FormEvent } from 'react'
+import { useEffect, useState, FormEvent } from 'react'
 import { supabase } from '../lib/supabase'
 import type { DeductionRate, Subcontractor, SubcontractorType } from '../types/cis'
-import { parseCsv, toCsv } from '../utils/csv'
 
 const emptyForm = {
   subcontractor_type: 'sole_trader' as SubcontractorType,
@@ -11,26 +10,9 @@ const emptyForm = {
   company_reg_number: '',
   email: '',
   deduction_rate: '30' as string,
-  vat_registered: false,
   active: true,
   verification_number: '',
   verified_at: '',
-}
-
-const CSV_TEMPLATE_HEADERS = [
-  'business_name',
-  'subcontractor_type',
-  'utr',
-  'ni_number',
-  'company_reg_number',
-  'email',
-  'deduction_rate',
-  'vat_registered',
-]
-
-interface ImportRow {
-  data: Record<string, string>
-  error?: string
 }
 
 export default function SubcontractorsTab({ contractorId }: { contractorId: string }) {
@@ -40,10 +22,6 @@ export default function SubcontractorsTab({ contractorId }: { contractorId: stri
   const [editingId, setEditingId] = useState<string | null>(null)
   const [verifying, setVerifying] = useState<string | null>(null)
   const [form, setForm] = useState(emptyForm)
-  const [showImport, setShowImport] = useState(false)
-  const [importRows, setImportRows] = useState<ImportRow[]>([])
-  const [importing, setImporting] = useState(false)
-  const fileInputRef = useRef<HTMLInputElement | null>(null)
 
   const load = async () => {
     setLoading(true)
@@ -77,7 +55,6 @@ export default function SubcontractorsTab({ contractorId }: { contractorId: stri
       company_reg_number: s.company_reg_number ?? '',
       email: s.email ?? '',
       deduction_rate: String(s.deduction_rate),
-      vat_registered: s.vat_registered,
       active: s.active,
       verification_number: s.verification_number ?? '',
       verified_at: s.verified_at ? s.verified_at.slice(0, 10) : '',
@@ -101,7 +78,6 @@ export default function SubcontractorsTab({ contractorId }: { contractorId: stri
       company_reg_number: form.company_reg_number || null,
       email: form.email || null,
       deduction_rate: Number(form.deduction_rate) as DeductionRate,
-      vat_registered: form.vat_registered,
       active: form.active,
     }
 
@@ -158,97 +134,9 @@ export default function SubcontractorsTab({ contractorId }: { contractorId: stri
     }
   }
 
-  const downloadTemplate = () => {
-    const csv = toCsv([
-      CSV_TEMPLATE_HEADERS,
-      ['Jane Smith Builders', 'sole_trader', '1234567890', '', '', 'jane@example.com', '20', 'false'],
-    ])
-    const blob = new Blob([csv], { type: 'text/csv' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = 'subcontractor-import-template.csv'
-    a.click()
-    URL.revokeObjectURL(url)
-  }
-
-  const startImport = () => {
-    setShowForm(false)
-    setShowImport(true)
-    setImportRows([])
-  }
-
-  const cancelImport = () => {
-    setShowImport(false)
-    setImportRows([])
-    if (fileInputRef.current) fileInputRef.current.value = ''
-  }
-
-  const validTypes: SubcontractorType[] = ['sole_trader', 'partnership', 'company', 'trust']
-
-  const handleFileSelected = async (file: File) => {
-    const text = await file.text()
-    const rows = parseCsv(text)
-    if (rows.length === 0) {
-      setImportRows([])
-      return
-    }
-    const header = rows[0].map((h) => h.trim().toLowerCase())
-    const body = rows.slice(1)
-    const parsed: ImportRow[] = body.map((cells) => {
-      const data: Record<string, string> = {}
-      header.forEach((key, i) => {
-        data[key] = (cells[i] ?? '').trim()
-      })
-      let error: string | undefined
-      if (!data.business_name) {
-        error = 'Missing business name'
-      } else if (data.subcontractor_type && !validTypes.includes(data.subcontractor_type as SubcontractorType)) {
-        error = `Unknown type "${data.subcontractor_type}" (use sole_trader, partnership, company or trust)`
-      } else if (data.deduction_rate && !['0', '20', '30'].includes(data.deduction_rate)) {
-        error = `Deduction rate must be 0, 20 or 30 (got "${data.deduction_rate}")`
-      }
-      return { data, error }
-    })
-    setImportRows(parsed)
-  }
-
-  const handleConfirmImport = async () => {
-    const validRows = importRows.filter((r) => !r.error)
-    if (validRows.length === 0) return
-    setImporting(true)
-    const payload = validRows.map((r) => ({
-      contractor_id: contractorId,
-      business_name: r.data.business_name,
-      subcontractor_type: (r.data.subcontractor_type || 'sole_trader') as SubcontractorType,
-      utr: r.data.utr || null,
-      ni_number: r.data.ni_number || null,
-      company_reg_number: r.data.company_reg_number || null,
-      email: r.data.email || null,
-      deduction_rate: Number(r.data.deduction_rate || '30') as DeductionRate,
-      vat_registered: ['true', '1', 'yes', 'y'].includes((r.data.vat_registered || '').toLowerCase()),
-      active: true,
-      verification_status: 'unverified' as const,
-    }))
-    const { error } = await supabase.from('cis_subcontractors').insert(payload)
-    setImporting(false)
-    if (error) {
-      alert(`Import failed: ${error.message}`)
-      return
-    }
-    cancelImport()
-    load()
-  }
-
   return (
     <div>
-      <div className="flex justify-end gap-2 mb-3">
-        <button
-          onClick={() => (showImport ? cancelImport() : startImport())}
-          className="text-sm bg-white border border-slate-300 text-slate-700 rounded px-3 py-1.5 hover:bg-slate-50"
-        >
-          {showImport ? 'Cancel import' : 'Import CSV'}
-        </button>
+      <div className="flex justify-end mb-3">
         <button
           onClick={() => (showForm ? cancelForm() : startCreate())}
           className="text-sm bg-slate-900 text-white rounded px-3 py-1.5 hover:bg-slate-800"
@@ -256,86 +144,6 @@ export default function SubcontractorsTab({ contractorId }: { contractorId: stri
           {showForm ? 'Cancel' : 'Add subcontractor'}
         </button>
       </div>
-
-      {showImport && (
-        <div className="bg-white border border-slate-200 rounded-lg p-4 mb-4">
-          <div className="flex items-center justify-between mb-3">
-            <div className="text-xs font-medium text-slate-500">
-              Bulk import subcontractors from a CSV file
-            </div>
-            <button
-              onClick={downloadTemplate}
-              className="text-xs text-slate-500 underline hover:text-slate-800"
-            >
-              Download template
-            </button>
-          </div>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".csv,text/csv"
-            onChange={(e) => e.target.files?.[0] && handleFileSelected(e.target.files[0])}
-            className="text-sm mb-3"
-          />
-          <div className="text-xs text-slate-400 mb-3">
-            Columns: {CSV_TEMPLATE_HEADERS.join(', ')}. Only <code>business_name</code> is
-            required — everything else defaults sensibly (type: sole trader, rate: 30%, not VAT
-            registered).
-          </div>
-
-          {importRows.length > 0 && (
-            <>
-              <div className="max-h-64 overflow-y-auto border border-slate-100 rounded mb-3">
-                <table className="w-full text-xs">
-                  <thead className="bg-slate-50 text-slate-500 text-left sticky top-0">
-                    <tr>
-                      <th className="px-2 py-1">Business name</th>
-                      <th className="px-2 py-1">Type</th>
-                      <th className="px-2 py-1">UTR</th>
-                      <th className="px-2 py-1">Rate</th>
-                      <th className="px-2 py-1">VAT</th>
-                      <th className="px-2 py-1">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {importRows.map((r, i) => (
-                      <tr key={i} className={r.error ? 'bg-red-50' : ''}>
-                        <td className="px-2 py-1">{r.data.business_name || '—'}</td>
-                        <td className="px-2 py-1">{r.data.subcontractor_type || 'sole_trader'}</td>
-                        <td className="px-2 py-1">{r.data.utr || '—'}</td>
-                        <td className="px-2 py-1">{r.data.deduction_rate || '30'}%</td>
-                        <td className="px-2 py-1">{r.data.vat_registered || 'false'}</td>
-                        <td className="px-2 py-1">
-                          {r.error ? (
-                            <span className="text-red-600">{r.error}</span>
-                          ) : (
-                            <span className="text-green-600">Ready</span>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              <div className="flex items-center justify-between">
-                <div className="text-xs text-slate-400">
-                  {importRows.filter((r) => !r.error).length} of {importRows.length} rows ready to
-                  import
-                </div>
-                <button
-                  onClick={handleConfirmImport}
-                  disabled={importing || importRows.every((r) => r.error)}
-                  className="text-sm bg-slate-900 text-white rounded px-3 py-1.5 hover:bg-slate-800 disabled:opacity-50"
-                >
-                  {importing
-                    ? 'Importing…'
-                    : `Import ${importRows.filter((r) => !r.error).length} subcontractor(s)`}
-                </button>
-              </div>
-            </>
-          )}
-        </div>
-      )}
 
       {showForm && (
         <form
@@ -405,16 +213,6 @@ export default function SubcontractorsTab({ contractorId }: { contractorId: stri
               onChange={(e) => setForm({ ...form, email: e.target.value })}
               className="w-full rounded border border-slate-300 px-2 py-1.5 text-sm"
             />
-          </div>
-          <div className="flex items-end">
-            <label className="flex items-center gap-2 text-sm text-slate-600">
-              <input
-                type="checkbox"
-                checked={form.vat_registered}
-                onChange={(e) => setForm({ ...form, vat_registered: e.target.checked })}
-              />
-              VAT registered
-            </label>
           </div>
           {editingId && (
             <>

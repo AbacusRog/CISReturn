@@ -39,14 +39,3 @@ export function previousTaxMonths(count: number, from: Date = new Date()): Date[
   }
   return months
 }
-
-// The CIS/UK tax year runs 6 April to 5 April. Given a tax month's start
-// date (the 6th of some month), returns the start of the tax year it falls
-// in — 6 April of the same calendar year if the month is April–December,
-// or 6 April of the previous calendar year if it's January–March/early April.
-export function taxYearStart(taxMonthStart: Date): Date {
-  const year = taxMonthStart.getFullYear()
-  const month = taxMonthStart.getMonth() // 0-indexed; April = 3
-  const taxYearBeginsThisCalendarYear = month >= 3 // Apr(6th)–Dec, or Jan–Mar counts as previous
-  return new Date(taxYearBeginsThisCalendarYear ? year : year - 1, 3, 6)
-}
