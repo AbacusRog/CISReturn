@@ -104,6 +104,33 @@ export default function MonthlyReturnDetail() {
     load()
   }
 
+  const handleReopen = async () => {
+    if (!monthlyReturn) return
+    const alreadySubmitted = monthlyReturn.status === 'submitted' || monthlyReturn.status === 'accepted'
+    if (
+      !confirm(
+        alreadySubmitted
+          ? 'This return was already submitted to HMRC. Reopening it here only resets its status in this app — it does NOT withdraw or amend anything HMRC has received. Continue?'
+          : 'Reopen this return to draft? You can then reopen individual payments and rebuild it.',
+      )
+    )
+      return
+
+    // Drop the persisted line snapshot so it's rebuilt fresh from payments once finalised again
+    await supabase.from('cis_return_lines').delete().eq('monthly_return_id', monthlyReturn.id)
+    await supabase
+      .from('cis_monthly_returns')
+      .update({
+        status: 'draft',
+        submitted_at: null,
+        correlation_id: null,
+        hmrc_response: null,
+      })
+      .eq('id', monthlyReturn.id)
+    setMessage('Return reopened — go back to Payments to make changes, then rebuild it.')
+    load()
+  }
+
   const handleSubmit = async () => {
     if (!monthlyReturn) return
     setSubmitting(true)
@@ -234,19 +261,36 @@ export default function MonthlyReturnDetail() {
           </button>
         )}
         {monthlyReturn.status === 'ready' && (
-          <button
-            onClick={handleSubmit}
-            disabled={submitting}
-            className="text-sm bg-slate-900 text-white rounded px-3 py-1.5 hover:bg-slate-800 disabled:opacity-50"
-          >
-            {submitting ? 'Submitting…' : 'Submit to HMRC (sandbox)'}
-          </button>
+          <>
+            <button
+              onClick={handleSubmit}
+              disabled={submitting}
+              className="text-sm bg-slate-900 text-white rounded px-3 py-1.5 hover:bg-slate-800 disabled:opacity-50"
+            >
+              {submitting ? 'Submitting…' : 'Submit to HMRC (sandbox)'}
+            </button>
+            <button
+              onClick={handleReopen}
+              className="text-sm text-slate-500 hover:text-slate-800 px-3 py-1.5"
+            >
+              Reopen to draft
+            </button>
+          </>
         )}
-        {(monthlyReturn.status === 'submitted' || monthlyReturn.status === 'accepted') && (
-          <span className="text-sm text-slate-500">
-            Submitted {monthlyReturn.submitted_at ? new Date(monthlyReturn.submitted_at).toLocaleString('en-GB') : ''}
-            {monthlyReturn.correlation_id ? ` · Correlation ID: ${monthlyReturn.correlation_id}` : ''}
-          </span>
+        {(monthlyReturn.status === 'submitted' || monthlyReturn.status === 'accepted' || monthlyReturn.status === 'rejected') && (
+          <>
+            <span className="text-sm text-slate-500">
+              {monthlyReturn.status === 'rejected' ? 'Rejected' : 'Submitted'}
+              {monthlyReturn.submitted_at ? ` ${new Date(monthlyReturn.submitted_at).toLocaleString('en-GB')}` : ''}
+              {monthlyReturn.correlation_id ? ` · Correlation ID: ${monthlyReturn.correlation_id}` : ''}
+            </span>
+            <button
+              onClick={handleReopen}
+              className="text-sm text-slate-500 hover:text-slate-800 px-3 py-1.5"
+            >
+              Reopen to draft
+            </button>
+          </>
         )}
       </div>
     </div>

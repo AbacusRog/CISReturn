@@ -1,20 +1,25 @@
 import { useEffect, useState, FormEvent } from 'react'
 import { supabase } from '../lib/supabase'
-import type { Subcontractor, SubcontractorType } from '../types/cis'
+import type { DeductionRate, Subcontractor, SubcontractorType } from '../types/cis'
+
+const emptyForm = {
+  subcontractor_type: 'sole_trader' as SubcontractorType,
+  business_name: '',
+  utr: '',
+  ni_number: '',
+  company_reg_number: '',
+  email: '',
+  deduction_rate: '30' as string,
+  active: true,
+}
 
 export default function SubcontractorsTab({ contractorId }: { contractorId: string }) {
   const [subcontractors, setSubcontractors] = useState<Subcontractor[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
+  const [editingId, setEditingId] = useState<string | null>(null)
   const [verifying, setVerifying] = useState<string | null>(null)
-  const [form, setForm] = useState({
-    subcontractor_type: 'sole_trader' as SubcontractorType,
-    business_name: '',
-    utr: '',
-    ni_number: '',
-    company_reg_number: '',
-    email: '',
-  })
+  const [form, setForm] = useState(emptyForm)
 
   const load = async () => {
     setLoading(true)
@@ -32,31 +37,57 @@ export default function SubcontractorsTab({ contractorId }: { contractorId: stri
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [contractorId])
 
-  const handleCreate = async (e: FormEvent) => {
+  const startCreate = () => {
+    setEditingId(null)
+    setForm(emptyForm)
+    setShowForm(true)
+  }
+
+  const startEdit = (s: Subcontractor) => {
+    setEditingId(s.id)
+    setForm({
+      subcontractor_type: s.subcontractor_type,
+      business_name: s.business_name,
+      utr: s.utr ?? '',
+      ni_number: s.ni_number ?? '',
+      company_reg_number: s.company_reg_number ?? '',
+      email: s.email ?? '',
+      deduction_rate: String(s.deduction_rate),
+      active: s.active,
+    })
+    setShowForm(true)
+  }
+
+  const cancelForm = () => {
+    setShowForm(false)
+    setEditingId(null)
+    setForm(emptyForm)
+  }
+
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
-    const { error } = await supabase.from('cis_subcontractors').insert({
-      contractor_id: contractorId,
+    const payload = {
       subcontractor_type: form.subcontractor_type,
       business_name: form.business_name,
       utr: form.utr || null,
       ni_number: form.ni_number || null,
       company_reg_number: form.company_reg_number || null,
       email: form.email || null,
-      deduction_rate: 30,
-      verification_status: 'unverified',
-    })
-    if (!error) {
-      setForm({
-        subcontractor_type: 'sole_trader',
-        business_name: '',
-        utr: '',
-        ni_number: '',
-        company_reg_number: '',
-        email: '',
-      })
-      setShowForm(false)
-      load()
+      deduction_rate: Number(form.deduction_rate) as DeductionRate,
+      active: form.active,
     }
+
+    if (editingId) {
+      await supabase.from('cis_subcontractors').update(payload).eq('id', editingId)
+    } else {
+      await supabase.from('cis_subcontractors').insert({
+        ...payload,
+        contractor_id: contractorId,
+        verification_status: 'unverified',
+      })
+    }
+    cancelForm()
+    load()
   }
 
   // Verification against HMRC's CIS API happens server-side (the Cloudflare
@@ -96,7 +127,7 @@ export default function SubcontractorsTab({ contractorId }: { contractorId: stri
     <div>
       <div className="flex justify-end mb-3">
         <button
-          onClick={() => setShowForm((s) => !s)}
+          onClick={() => (showForm ? cancelForm() : startCreate())}
           className="text-sm bg-slate-900 text-white rounded px-3 py-1.5 hover:bg-slate-800"
         >
           {showForm ? 'Cancel' : 'Add subcontractor'}
@@ -105,9 +136,12 @@ export default function SubcontractorsTab({ contractorId }: { contractorId: stri
 
       {showForm && (
         <form
-          onSubmit={handleCreate}
+          onSubmit={handleSubmit}
           className="bg-white border border-slate-200 rounded-lg p-4 mb-4 grid grid-cols-2 gap-4"
         >
+          <div className="col-span-2 text-xs font-medium text-slate-500 -mb-2">
+            {editingId ? 'Editing subcontractor' : 'New subcontractor'}
+          </div>
           <div>
             <label className="block text-xs font-medium text-slate-600 mb-1">Type</label>
             <select
@@ -169,12 +203,40 @@ export default function SubcontractorsTab({ contractorId }: { contractorId: stri
               className="w-full rounded border border-slate-300 px-2 py-1.5 text-sm"
             />
           </div>
+          {editingId && (
+            <>
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">
+                  Deduction rate
+                </label>
+                <select
+                  value={form.deduction_rate}
+                  onChange={(e) => setForm({ ...form, deduction_rate: e.target.value })}
+                  className="w-full rounded border border-slate-300 px-2 py-1.5 text-sm"
+                >
+                  <option value="0">0% (gross status)</option>
+                  <option value="20">20% (verified)</option>
+                  <option value="30">30% (unverified / higher rate)</option>
+                </select>
+              </div>
+              <div className="flex items-end">
+                <label className="flex items-center gap-2 text-sm text-slate-600">
+                  <input
+                    type="checkbox"
+                    checked={form.active}
+                    onChange={(e) => setForm({ ...form, active: e.target.checked })}
+                  />
+                  Active
+                </label>
+              </div>
+            </>
+          )}
           <div className="col-span-2">
             <button
               type="submit"
               className="text-sm bg-slate-900 text-white rounded px-3 py-1.5 hover:bg-slate-800"
             >
-              Save subcontractor
+              {editingId ? 'Save changes' : 'Save subcontractor'}
             </button>
           </div>
         </form>
@@ -197,17 +259,26 @@ export default function SubcontractorsTab({ contractorId }: { contractorId: stri
           </thead>
           <tbody className="divide-y divide-slate-100">
             {subcontractors.map((s) => (
-              <tr key={s.id}>
+              <tr key={s.id} className={s.active ? '' : 'opacity-50'}>
                 <td className="px-4 py-2">
                   <div className="font-medium text-slate-900">{s.business_name}</div>
-                  <div className="text-xs text-slate-400">{s.subcontractor_type}</div>
+                  <div className="text-xs text-slate-400">
+                    {s.subcontractor_type}
+                    {!s.active ? ' · inactive' : ''}
+                  </div>
                 </td>
                 <td className="px-4 py-2 text-slate-600">{s.utr || s.ni_number || '—'}</td>
                 <td className="px-4 py-2 text-slate-600">{s.deduction_rate}%</td>
                 <td className="px-4 py-2">
                   <StatusBadge status={s.verification_status} />
                 </td>
-                <td className="px-4 py-2 text-right">
+                <td className="px-4 py-2 text-right space-x-3">
+                  <button
+                    onClick={() => startEdit(s)}
+                    className="text-xs text-slate-500 hover:text-slate-800"
+                  >
+                    Edit
+                  </button>
                   <button
                     onClick={() => handleVerify(s)}
                     disabled={verifying === s.id}

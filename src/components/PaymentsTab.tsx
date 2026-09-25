@@ -90,6 +90,22 @@ export default function PaymentsTab({ contractorId }: { contractorId: string }) 
     load()
   }
 
+  const handleReopenPayment = async (subcontractor: Subcontractor) => {
+    const existing = payments[subcontractor.id]
+    if (!existing) return
+    if (
+      !confirm(
+        `Reopen ${subcontractor.business_name}'s payment for this month? If a monthly return has already been built from it, you'll need to rebuild the return afterwards.`,
+      )
+    )
+      return
+    await supabase
+      .from('cis_payments')
+      .update({ finalised: false, finalised_at: null })
+      .eq('id', existing.id)
+    load()
+  }
+
   const finalisedCount = Object.values(payments).filter((p) => p.finalised).length
   const totalPayable = subcontractors.reduce((sum, s) => {
     const row = draft[s.id]
@@ -233,7 +249,15 @@ export default function PaymentsTab({ contractorId }: { contractorId: string }) 
                   <td className="px-4 py-2 text-slate-900 font-medium">{netAmount.toFixed(2)}</td>
                   <td className="px-4 py-2 text-right">
                     {finalised ? (
-                      <span className="text-xs text-green-600">Finalised</span>
+                      <span className="inline-flex items-center gap-2">
+                        <span className="text-xs text-green-600">Finalised</span>
+                        <button
+                          onClick={() => handleReopenPayment(s)}
+                          className="text-xs text-slate-400 hover:text-slate-700"
+                        >
+                          Reopen
+                        </button>
+                      </span>
                     ) : (
                       <button
                         onClick={() => handleSaveRow(s)}
