@@ -37,48 +37,63 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     )
   }
 
+  if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) {
+    return json(
+      {
+        error:
+          'SUPABASE_URL and/or SUPABASE_SERVICE_ROLE_KEY are not set as environment secrets in Cloudflare Pages — this function cannot read the statement without them.',
+      },
+      501,
+    )
+  }
+
   const headers = {
     apikey: env.SUPABASE_SERVICE_ROLE_KEY,
     Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
   }
 
-  const statementRes = await fetch(
+  const statement = await fetchOneOrThrow(
     `${env.SUPABASE_URL}/rest/v1/cis_statements?id=eq.${statementId}&select=*`,
-    { headers },
+    headers,
+    'statement',
   )
-  const statements = await statementRes.json()
-  const statement = statements?.[0]
-  if (!statement?.pdf_path) return json({ error: 'Statement or its PDF not found' }, 404)
+  if ('error' in statement) return json({ error: statement.error }, statement.status)
+  if (!statement.row?.pdf_path) return json({ error: 'Statement or its PDF not found' }, 404)
 
-  const paymentRes = await fetch(
-    `${env.SUPABASE_URL}/rest/v1/cis_payments?id=eq.${statement.payment_id}&select=*`,
-    { headers },
+  const payment = await fetchOneOrThrow(
+    `${env.SUPABASE_URL}/rest/v1/cis_payments?id=eq.${statement.row.payment_id}&select=*`,
+    headers,
+    'payment',
   )
-  const payments = await paymentRes.json()
-  const payment = payments?.[0]
-  if (!payment) return json({ error: 'Payment not found' }, 404)
+  if ('error' in payment) return json({ error: payment.error }, payment.status)
+  if (!payment.row) return json({ error: 'Payment not found' }, 404)
 
-  const subRes = await fetch(
-    `${env.SUPABASE_URL}/rest/v1/cis_subcontractors?id=eq.${payment.subcontractor_id}&select=*`,
-    { headers },
+  const subcontractorResult = await fetchOneOrThrow(
+    `${env.SUPABASE_URL}/rest/v1/cis_subcontractors?id=eq.${payment.row.subcontractor_id}&select=*`,
+    headers,
+    'subcontractor',
   )
-  const subs = await subRes.json()
-  const subcontractor = subs?.[0]
+  if ('error' in subcontractorResult) return json({ error: subcontractorResult.error }, subcontractorResult.status)
+  const subcontractor = subcontractorResult.row
   if (!subcontractor?.email) return json({ error: 'Subcontractor has no email address on file' }, 400)
 
-  const contractorRes = await fetch(
-    `${env.SUPABASE_URL}/rest/v1/cis_contractors?id=eq.${payment.contractor_id}&select=*`,
-    { headers },
+  const contractorResult = await fetchOneOrThrow(
+    `${env.SUPABASE_URL}/rest/v1/cis_contractors?id=eq.${payment.row.contractor_id}&select=*`,
+    headers,
+    'contractor',
   )
-  const contractors = await contractorRes.json()
-  const contractor = contractors?.[0]
+  const contractor = 'row' in contractorResult ? contractorResult.row : null
+  const paymentRow = payment.row
 
   // Download the PDF from Supabase Storage
   const pdfRes = await fetch(
-    `${env.SUPABASE_URL}/storage/v1/object/cis-statements/${statement.pdf_path}`,
+    `${env.SUPABASE_URL}/storage/v1/object/cis-statements/${statement.row.pdf_path}`,
     { headers },
   )
-  if (!pdfRes.ok) return json({ error: 'Could not fetch the statement PDF from storage' }, 502)
+  if (!pdfRes.ok) {
+    const text = await pdfRes.text()
+    return json({ error: `Could not fetch the statement PDF from storage (${pdfRes.status}): ${text}` }, 502)
+  }
   const pdfBuffer = await pdfRes.arrayBuffer()
   const pdfBase64 = arrayBufferToBase64(pdfBuffer)
 
@@ -92,10 +107,10 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
       from: env.RESEND_FROM_EMAIL,
       to: subcontractor.email,
       subject: `Payment and Deduction Statement — ${contractor?.name ?? 'Contractor'}`,
-      html: `<p>Please find attached your Payment and Deduction Statement from ${contractor?.name ?? 'us'} for the tax month starting ${payment.tax_month_start}.</p>`,
+      html: `<p>Please find attached your Payment and Deduction Statement from ${contractor?.name ?? 'us'} for the tax month starting ${paymentRow.tax_month_start}.</p>`,
       attachments: [
         {
-          filename: `${subcontractor.business_name} - ${payment.tax_month_start}.pdf`,
+          filename: `${subcontractor.business_name} - ${paymentRow.tax_month_start}.pdf`,
           content: pdfBase64,
         },
       ],
@@ -108,6 +123,43 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
   }
 
   return json({ ok: true })
+}
+
+// Fetches a single row from a PostgREST endpoint and distinguishes a genuine
+// "not found" (empty array) from an auth/config failure (PostgREST returns
+// an error object, not an array, when the API key is missing or wrong) —
+// so misconfigured Cloudflare secrets get reported as what they are instead
+// of a misleading "not found".
+async function fetchOneOrThrow(
+  url: string,
+  headers: Record<string, string>,
+  label: string,
+): Promise<{ row: any } | { error: string; status: number }> {
+  let res: Response
+  try {
+    res = await fetch(url, { headers })
+  } catch (err) {
+    return {
+      error: `Could not reach Supabase to look up the ${label} (check SUPABASE_URL): ${
+        err instanceof Error ? err.message : String(err)
+      }`,
+      status: 502,
+    }
+  }
+  const body = await res.json().catch(() => null)
+  if (!res.ok) {
+    return {
+      error: `Supabase rejected the ${label} lookup (${res.status}). Check SUPABASE_SERVICE_ROLE_KEY is set correctly. Details: ${JSON.stringify(body)}`,
+      status: 502,
+    }
+  }
+  if (!Array.isArray(body)) {
+    return {
+      error: `Unexpected response looking up the ${label}: ${JSON.stringify(body)}`,
+      status: 502,
+    }
+  }
+  return { row: body[0] ?? null }
 }
 
 function arrayBufferToBase64(buffer: ArrayBuffer): string {
