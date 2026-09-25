@@ -32,9 +32,24 @@ export default function StatementCell({ contractor, subcontractor, payment }: Pr
   const pdfPath = () =>
     `${contractor.id}/${subcontractor.id}/${payment.tax_month_start}.pdf`
 
+  const [justGenerated, setJustGenerated] = useState(false)
+
+  const downloadBytes = (bytes: Uint8Array | ArrayBuffer, filename: string) => {
+    const blob = new Blob([bytes as BlobPart], { type: 'application/pdf' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
+  }
+
   const handleGenerate = async () => {
     setBusy('generate')
     setError(null)
+    setJustGenerated(false)
     try {
       const pdfBytes = await buildStatementPdf(contractor, subcontractor, payment)
       const path = pdfPath()
@@ -55,6 +70,12 @@ export default function StatementCell({ contractor, subcontractor, payment }: Pr
         if (insertError) throw insertError
         setStatement(created as StatementRow)
       }
+
+      // Download immediately so generating feels like it did something,
+      // rather than just quietly flipping the buttons shown below.
+      downloadBytes(pdfBytes, `${subcontractor.business_name} - ${payment.tax_month_start}.pdf`)
+      setJustGenerated(true)
+      setTimeout(() => setJustGenerated(false), 3000)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to generate statement')
     } finally {
@@ -71,12 +92,7 @@ export default function StatementCell({ contractor, subcontractor, payment }: Pr
       setError('Could not download the PDF')
       return
     }
-    const url = URL.createObjectURL(data)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `${subcontractor.business_name} - ${payment.tax_month_start}.pdf`
-    a.click()
-    URL.revokeObjectURL(url)
+    downloadBytes(await data.arrayBuffer(), `${subcontractor.business_name} - ${payment.tax_month_start}.pdf`)
   }
 
   const handleEmail = async () => {
@@ -114,6 +130,7 @@ export default function StatementCell({ contractor, subcontractor, payment }: Pr
   return (
     <div className="flex items-center gap-2 justify-end">
       {error && <span className="text-xs text-red-500">{error}</span>}
+      {justGenerated && <span className="text-xs text-green-600">Downloaded ✓</span>}
       {!statement?.pdf_path ? (
         <button
           onClick={handleGenerate}

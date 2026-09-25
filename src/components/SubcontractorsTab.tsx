@@ -11,6 +11,8 @@ const emptyForm = {
   email: '',
   deduction_rate: '30' as string,
   active: true,
+  verification_number: '',
+  verified_at: '',
 }
 
 export default function SubcontractorsTab({ contractorId }: { contractorId: string }) {
@@ -54,6 +56,8 @@ export default function SubcontractorsTab({ contractorId }: { contractorId: stri
       email: s.email ?? '',
       deduction_rate: String(s.deduction_rate),
       active: s.active,
+      verification_number: s.verification_number ?? '',
+      verified_at: s.verified_at ? s.verified_at.slice(0, 10) : '',
     })
     setShowForm(true)
   }
@@ -66,7 +70,7 @@ export default function SubcontractorsTab({ contractorId }: { contractorId: stri
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
-    const payload = {
+    const payload: Record<string, unknown> = {
       subcontractor_type: form.subcontractor_type,
       business_name: form.business_name,
       utr: form.utr || null,
@@ -78,6 +82,13 @@ export default function SubcontractorsTab({ contractorId }: { contractorId: stri
     }
 
     if (editingId) {
+      payload.verification_number = form.verification_number || null
+      payload.verified_at = form.verified_at ? new Date(form.verified_at).toISOString() : null
+      // Entering a verification number manually (e.g. verified outside this
+      // app, or before the HMRC integration is live) counts as verified.
+      if (form.verification_number.trim()) {
+        payload.verification_status = 'verified'
+      }
       await supabase.from('cis_subcontractors').update(payload).eq('id', editingId)
     } else {
       await supabase.from('cis_subcontractors').insert({
@@ -228,6 +239,32 @@ export default function SubcontractorsTab({ contractorId }: { contractorId: stri
                   />
                   Active
                 </label>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">
+                  Verification number
+                </label>
+                <input
+                  value={form.verification_number}
+                  onChange={(e) => setForm({ ...form, verification_number: e.target.value })}
+                  placeholder="e.g. V1393482866"
+                  className="w-full rounded border border-slate-300 px-2 py-1.5 text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">
+                  Verification date
+                </label>
+                <input
+                  type="date"
+                  value={form.verified_at}
+                  onChange={(e) => setForm({ ...form, verified_at: e.target.value })}
+                  className="w-full rounded border border-slate-300 px-2 py-1.5 text-sm"
+                />
+              </div>
+              <div className="col-span-2 text-xs text-slate-400 -mt-2">
+                Fill these in if the subcontractor was already verified with HMRC elsewhere.
+                Entering a verification number marks them as verified.
               </div>
             </>
           )}
