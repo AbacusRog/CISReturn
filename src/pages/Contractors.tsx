@@ -62,7 +62,7 @@ export default function Contractors() {
       {showForm && (
         <form
           onSubmit={handleCreate}
-          className="bg-white border border-slate-200 rounded-lg p-4 mb-6 grid grid-cols-2 gap-4"
+          className="bg-white border border-slate-200 rounded-lg p-4 mb-6 grid grid-cols-1 sm:grid-cols-2 gap-4"
         >
           <div>
             <label className="block text-xs font-medium text-slate-600 mb-1">Contractor name</label>
@@ -101,7 +101,7 @@ export default function Contractors() {
               className="w-full rounded border border-slate-300 px-2 py-1.5 text-sm"
             />
           </div>
-          <div className="col-span-2">
+          <div className="col-span-1 sm:col-span-2">
             <button
               type="submit"
               disabled={saving}

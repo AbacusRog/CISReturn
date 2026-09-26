@@ -232,7 +232,7 @@ export default function MonthlyReturnDetail() {
 
   return (
     <div>
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
         <Link to="/returns" className="text-xs text-slate-400 hover:text-slate-600">
           ← All returns
         </Link>
@@ -262,7 +262,8 @@ export default function MonthlyReturnDetail() {
             : 'No finalised payments were found for this tax month. This will be submitted as a nil return.'}
         </div>
       ) : (
-        <table className="w-full bg-white border border-slate-200 rounded-lg overflow-hidden text-sm mb-4">
+        <div className="overflow-x-auto -mx-3 sm:mx-0 px-3 sm:px-0 mb-4">
+        <table className="w-full min-w-[560px] bg-white border border-slate-200 rounded-lg overflow-hidden text-sm">
           <thead className="bg-slate-50 text-xs text-slate-500 text-left">
             <tr>
               <th className="px-4 py-2">Subcontractor</th>
@@ -297,6 +298,7 @@ export default function MonthlyReturnDetail() {
             </tr>
           </tfoot>
         </table>
+        </div>
       )}
 
       {monthlyReturn.status === 'draft' && (
@@ -331,7 +333,7 @@ export default function MonthlyReturnDetail() {
         </div>
       )}
 
-      <div className="flex gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         {monthlyReturn.status === 'draft' && (
           <>
             <button

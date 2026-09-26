@@ -242,7 +242,7 @@ export default function SubcontractorsTab({ contractorId }: { contractorId: stri
 
   return (
     <div>
-      <div className="flex justify-end gap-2 mb-3">
+      <div className="flex flex-wrap justify-end gap-2 mb-3">
         <button
           onClick={() => (showImport ? cancelImport() : startImport())}
           className="text-sm bg-white border border-slate-300 text-slate-700 rounded px-3 py-1.5 hover:bg-slate-50"
@@ -259,7 +259,7 @@ export default function SubcontractorsTab({ contractorId }: { contractorId: stri
 
       {showImport && (
         <div className="bg-white border border-slate-200 rounded-lg p-4 mb-4">
-          <div className="flex items-center justify-between mb-3">
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
             <div className="text-xs font-medium text-slate-500">
               Bulk import subcontractors from a CSV file
             </div>
@@ -285,8 +285,8 @@ export default function SubcontractorsTab({ contractorId }: { contractorId: stri
 
           {importRows.length > 0 && (
             <>
-              <div className="max-h-64 overflow-y-auto border border-slate-100 rounded mb-3">
-                <table className="w-full text-xs">
+              <div className="max-h-64 overflow-y-auto overflow-x-auto border border-slate-100 rounded mb-3">
+                <table className="w-full min-w-[480px] text-xs">
                   <thead className="bg-slate-50 text-slate-500 text-left sticky top-0">
                     <tr>
                       <th className="px-2 py-1">Business name</th>
@@ -317,7 +317,7 @@ export default function SubcontractorsTab({ contractorId }: { contractorId: stri
                   </tbody>
                 </table>
               </div>
-              <div className="flex items-center justify-between">
+              <div className="flex flex-wrap items-center gap-2 justify-between">
                 <div className="text-xs text-slate-400">
                   {importRows.filter((r) => !r.error).length} of {importRows.length} rows ready to
                   import
@@ -340,9 +340,9 @@ export default function SubcontractorsTab({ contractorId }: { contractorId: stri
       {showForm && (
         <form
           onSubmit={handleSubmit}
-          className="bg-white border border-slate-200 rounded-lg p-4 mb-4 grid grid-cols-2 gap-4"
+          className="bg-white border border-slate-200 rounded-lg p-4 mb-4 grid grid-cols-1 sm:grid-cols-2 gap-4"
         >
-          <div className="col-span-2 text-xs font-medium text-slate-500 -mb-2">
+          <div className="col-span-1 sm:col-span-2 text-xs font-medium text-slate-500 -mb-2">
             {editingId ? 'Editing subcontractor' : 'New subcontractor'}
           </div>
           <div>
@@ -477,11 +477,11 @@ export default function SubcontractorsTab({ contractorId }: { contractorId: stri
               className="w-full rounded border border-slate-300 px-2 py-1.5 text-sm"
             />
           </div>
-          <div className="col-span-2 text-xs text-slate-400 -mt-2">
+          <div className="col-span-1 sm:col-span-2 text-xs text-slate-400 -mt-2">
             Fill these in if the subcontractor was already verified with HMRC elsewhere. Entering a
             verification number marks them as verified.
           </div>
-          <div className="col-span-2">
+          <div className="col-span-1 sm:col-span-2">
             <button
               type="submit"
               className="text-sm bg-slate-900 text-white rounded px-3 py-1.5 hover:bg-slate-800"
@@ -497,7 +497,8 @@ export default function SubcontractorsTab({ contractorId }: { contractorId: stri
       ) : subcontractors.length === 0 ? (
         <div className="text-sm text-slate-400">No subcontractors yet.</div>
       ) : (
-        <table className="w-full bg-white border border-slate-200 rounded-lg overflow-hidden text-sm">
+        <div className="overflow-x-auto -mx-3 sm:mx-0 px-3 sm:px-0">
+        <table className="w-full min-w-[560px] bg-white border border-slate-200 rounded-lg overflow-hidden text-sm">
           <thead className="bg-slate-50 text-xs text-slate-500 text-left">
             <tr>
               <th className="px-4 py-2">Name</th>
@@ -541,6 +542,7 @@ export default function SubcontractorsTab({ contractorId }: { contractorId: stri
             ))}
           </tbody>
         </table>
+        </div>
       )}
     </div>
   )

@@ -41,10 +41,10 @@ export default function ContractorDetail() {
         {contractor?.name ?? 'Loading…'}
       </h1>
 
-      <div className="flex gap-4 border-b border-slate-200 mb-4">
+      <div className="flex gap-4 border-b border-slate-200 mb-4 overflow-x-auto whitespace-nowrap">
         <button
           onClick={() => setTab('details')}
-          className={`text-sm pb-2 border-b-2 -mb-px ${
+          className={`text-sm pb-2 border-b-2 -mb-px shrink-0 ${
             tab === 'details'
               ? 'border-slate-900 text-slate-900 font-medium'
               : 'border-transparent text-slate-500'
@@ -54,7 +54,7 @@ export default function ContractorDetail() {
         </button>
         <button
           onClick={() => setTab('subcontractors')}
-          className={`text-sm pb-2 border-b-2 -mb-px ${
+          className={`text-sm pb-2 border-b-2 -mb-px shrink-0 ${
             tab === 'subcontractors'
               ? 'border-slate-900 text-slate-900 font-medium'
               : 'border-transparent text-slate-500'
@@ -64,7 +64,7 @@ export default function ContractorDetail() {
         </button>
         <button
           onClick={() => setTab('payments')}
-          className={`text-sm pb-2 border-b-2 -mb-px ${
+          className={`text-sm pb-2 border-b-2 -mb-px shrink-0 ${
             tab === 'payments'
               ? 'border-slate-900 text-slate-900 font-medium'
               : 'border-transparent text-slate-500'
@@ -74,7 +74,7 @@ export default function ContractorDetail() {
         </button>
         <button
           onClick={() => setTab('returns')}
-          className={`text-sm pb-2 border-b-2 -mb-px ${
+          className={`text-sm pb-2 border-b-2 -mb-px shrink-0 ${
             tab === 'returns'
               ? 'border-slate-900 text-slate-900 font-medium'
               : 'border-transparent text-slate-500'
@@ -84,7 +84,7 @@ export default function ContractorDetail() {
         </button>
         <button
           onClick={() => setTab('import')}
-          className={`text-sm pb-2 border-b-2 -mb-px ${
+          className={`text-sm pb-2 border-b-2 -mb-px shrink-0 ${
             tab === 'import'
               ? 'border-slate-900 text-slate-900 font-medium'
               : 'border-transparent text-slate-500'

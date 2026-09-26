@@ -373,8 +373,8 @@ export default function PaymentsTab({ contractorId }: { contractorId: string }) 
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-3">
+      <div className="flex flex-col gap-3 mb-4">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
           <select
             value={selectedTaxYear}
             onChange={(e) => setSelectedTaxYear(e.target.value)}
@@ -412,25 +412,27 @@ export default function PaymentsTab({ contractorId }: { contractorId: string }) 
             </button>
           </div>
         </div>
-        <div className="flex items-center gap-3">
-          <button
-            onClick={handleDownloadAllStatements}
-            disabled={bulkBusy !== null || loading}
-            className="text-xs text-slate-500 hover:text-slate-800 disabled:opacity-50"
-          >
-            {bulkBusy === 'download' ? 'Zipping…' : 'Download all statements (year)'}
-          </button>
-          <button
-            onClick={handleEmailAll}
-            disabled={bulkBusy !== null || loading || finalisedCount === 0}
-            className="text-xs text-slate-500 hover:text-slate-800 disabled:opacity-50"
-          >
-            {bulkBusy === 'email' ? 'Emailing…' : 'Email all (this period)'}
-          </button>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 justify-between">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+            <button
+              onClick={handleDownloadAllStatements}
+              disabled={bulkBusy !== null || loading}
+              className="text-xs text-slate-500 hover:text-slate-800 disabled:opacity-50"
+            >
+              {bulkBusy === 'download' ? 'Zipping…' : 'Download all statements (year)'}
+            </button>
+            <button
+              onClick={handleEmailAll}
+              disabled={bulkBusy !== null || loading || finalisedCount === 0}
+              className="text-xs text-slate-500 hover:text-slate-800 disabled:opacity-50"
+            >
+              {bulkBusy === 'email' ? 'Emailing…' : 'Email all (this period)'}
+            </button>
+          </div>
           <button
             onClick={handleCreateReturn}
             disabled={saving || loading}
-            className="text-sm bg-slate-900 text-white rounded px-3 py-1.5 hover:bg-slate-800 disabled:opacity-50"
+            className="text-sm bg-slate-900 text-white rounded px-3 py-1.5 hover:bg-slate-800 disabled:opacity-50 w-full sm:w-auto"
           >
             {saving ? 'Preparing…' : 'Build monthly return →'}
           </button>
@@ -450,7 +452,8 @@ export default function PaymentsTab({ contractorId }: { contractorId: string }) 
           Add subcontractors first before entering payments.
         </div>
       ) : view === 'ytd' ? (
-        <table className="w-full bg-white border border-slate-200 rounded-lg overflow-hidden text-sm">
+        <div className="overflow-x-auto -mx-3 sm:mx-0 px-3 sm:px-0">
+        <table className="w-full min-w-[640px] bg-white border border-slate-200 rounded-lg overflow-hidden text-sm">
           <thead className="bg-slate-50 text-xs text-slate-500 text-left">
             <tr>
               <th className="px-4 py-2">Subcontractor</th>
@@ -487,8 +490,10 @@ export default function PaymentsTab({ contractorId }: { contractorId: string }) 
             </tr>
           </tfoot>
         </table>
+        </div>
       ) : (
-        <table className="w-full bg-white border border-slate-200 rounded-lg overflow-hidden text-sm">
+        <div className="overflow-x-auto -mx-3 sm:mx-0 px-3 sm:px-0">
+        <table className="w-full min-w-[860px] bg-white border border-slate-200 rounded-lg overflow-hidden text-sm">
           <thead className="bg-slate-50 text-xs text-slate-500 text-left">
             <tr>
               <th className="px-4 py-2">Subcontractor</th>
@@ -622,6 +627,7 @@ export default function PaymentsTab({ contractorId }: { contractorId: string }) 
             </tr>
           </tfoot>
         </table>
+        </div>
       )}
 
       {view === 'period' && (

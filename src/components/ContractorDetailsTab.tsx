@@ -152,9 +152,9 @@ export default function ContractorDetailsTab({ contractor, onSaved }: Props) {
 
       <form
         onSubmit={handleSubmit}
-        className="bg-white border border-slate-200 rounded-lg p-4 grid grid-cols-2 gap-4"
+        className="bg-white border border-slate-200 rounded-lg p-4 grid grid-cols-1 sm:grid-cols-2 gap-4"
       >
-        <div className="col-span-2 text-xs font-medium text-slate-500 -mb-2">
+        <div className="col-span-1 sm:col-span-2 text-xs font-medium text-slate-500 -mb-2">
           Contractor details
         </div>
         <div>
@@ -243,7 +243,7 @@ export default function ContractorDetailsTab({ contractor, onSaved }: Props) {
             className="w-full rounded border border-slate-300 px-2 py-1.5 text-sm"
           />
         </div>
-        <div className="col-span-2 flex items-center gap-3">
+        <div className="col-span-1 sm:col-span-2 flex items-center gap-3">
           <button
             type="submit"
             disabled={saving}

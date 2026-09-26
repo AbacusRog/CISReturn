@@ -33,7 +33,8 @@ export default function MonthlyReturns() {
           No returns yet. Build one from a contractor's Payments tab.
         </div>
       ) : (
-        <table className="w-full bg-white border border-slate-200 rounded-lg overflow-hidden text-sm">
+        <div className="overflow-x-auto -mx-3 sm:mx-0 px-3 sm:px-0">
+        <table className="w-full min-w-[560px] bg-white border border-slate-200 rounded-lg overflow-hidden text-sm">
           <thead className="bg-slate-50 text-xs text-slate-500 text-left">
             <tr>
               <th className="px-4 py-2">Contractor</th>
@@ -66,6 +67,7 @@ export default function MonthlyReturns() {
             })}
           </tbody>
         </table>
+        </div>
       )}
     </div>
   )
