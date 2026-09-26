@@ -8,6 +8,7 @@ import {
 } from '../utils/parseCis300Xml'
 import { extractXmlFromPdf } from '../utils/extractXmlFromPdf'
 import { formatTaxMonthLabel } from '../utils/taxMonth'
+import { describeError } from '../utils/errors'
 
 interface FileResult {
   fileName: string
@@ -44,7 +45,7 @@ export default function ImportXmlTab({
       } catch (err) {
         parsedResults.push({
           fileName: file.name,
-          error: err instanceof Error ? err.message : 'Could not parse this file',
+          error: describeError(err),
         })
       }
     }
@@ -221,7 +222,7 @@ export default function ImportXmlTab({
       setResults([])
       if (fileInputRef.current) fileInputRef.current.value = ''
     } catch (err) {
-      alert(`Import failed partway through: ${err instanceof Error ? err.message : String(err)}`)
+      alert(`Import failed partway through: ${describeError(err)}`)
     } finally {
       setImporting(false)
     }

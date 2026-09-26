@@ -125,8 +125,38 @@ export function parseCis300Xml(xmlText: string): ParsedCis300Return {
     periodEnd,
     taxMonthStart: periodEndToTaxMonthStart(periodEnd),
     submittedAt,
-    subcontractors,
+    subcontractors: mergeDuplicateSubcontractors(subcontractors),
   }
+}
+
+// A single CIS300 return can list the same subcontractor more than once
+// (the same UTR/NINO appearing under two lines, sometimes even with
+// different names or verification numbers — HMRC's own systems key a
+// subcontractor by UTR/NINO/CRN, not by name). Since each subcontractor can
+// only have one payment per tax month here, merge same-identity lines by
+// summing their figures rather than letting the second insert fail against
+// that constraint.
+function mergeDuplicateSubcontractors(
+  subs: ParsedCis300Subcontractor[],
+): ParsedCis300Subcontractor[] {
+  const byKey = new Map<string, ParsedCis300Subcontractor>()
+  const order: string[] = []
+  for (const sub of subs) {
+    const key = sub.utr ?? sub.nino ?? sub.crn ?? `name:${sub.name}`
+    const existing = byKey.get(key)
+    if (!existing) {
+      byKey.set(key, { ...sub })
+      order.push(key)
+    } else {
+      existing.totalPayments += sub.totalPayments
+      existing.costOfMaterials += sub.costOfMaterials
+      existing.totalDeducted += sub.totalDeducted
+      // Keep whichever line actually carries a verification number/name,
+      // preferring the first one already stored.
+      existing.verificationNumber = existing.verificationNumber ?? sub.verificationNumber
+    }
+  }
+  return order.map((key) => byKey.get(key)!)
 }
 
 // HMRC's CIS300 doesn't transmit the deduction rate directly — it's implied
