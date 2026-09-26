@@ -17,7 +17,19 @@ export async function extractXmlFromPdf(file: File): Promise<string> {
   for (let i = 1; i <= pdf.numPages; i++) {
     const page = await pdf.getPage(i)
     const content = await page.getTextContent()
-    const pageText = content.items.map((item) => ('str' in item ? item.str : '')).join('\n')
+    // pdf.js splits text into a run per style change (e.g. a tag rendered in
+    // one colour, its value in another/bold), not per visual line — joining
+    // every item with a newline would inject whitespace into the middle of
+    // tags whenever the PDF colour-codes XML. Each item instead reports
+    // whether a real line break follows it (hasEOL), so only insert a
+    // newline there and concatenate everything else directly, reconstructing
+    // each line's characters exactly as shown.
+    let pageText = ''
+    for (const item of content.items) {
+      if (!('str' in item)) continue
+      pageText += item.str
+      if ('hasEOL' in item && item.hasEOL) pageText += '\n'
+    }
     fullText += pageText + '\n'
   }
 
@@ -31,5 +43,9 @@ export async function extractXmlFromPdf(file: File): Promise<string> {
         'printouts do.',
     )
   }
-  return fullText.slice(start, endIdx + endTag.length)
+  const xml = fullText.slice(start, endIdx + endTag.length)
+  // Belt and braces: if a stray line break still landed inside a tag (a
+  // style/colour run boundary pdf.js reported as hasEOL when it shouldn't
+  // have), collapse it to a single space rather than let it break parsing.
+  return xml.replace(/<[^>]*>/gs, (tag) => tag.replace(/\s*\n\s*/g, ' '))
 }

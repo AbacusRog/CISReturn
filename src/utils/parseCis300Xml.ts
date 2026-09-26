@@ -47,7 +47,8 @@ export function parseCis300Xml(xmlText: string): ParsedCis300Return {
   const doc = new DOMParser().parseFromString(xmlText, 'application/xml')
   const parserError = doc.querySelector('parsererror')
   if (parserError) {
-    throw new Error('Could not parse this file as XML')
+    const detail = parserError.textContent?.trim().split('\n')[0]
+    throw new Error(`Could not parse this file as XML${detail ? `: ${detail}` : ''}`)
   }
 
   // Namespaces make querySelector awkward across browsers, so match by
