@@ -10,6 +10,7 @@ export default function MonthlyReturnDetail() {
   const [contractor, setContractor] = useState<Contractor | null>(null)
   const [lines, setLines] = useState<ReturnLine[]>([])
   const [inactivityIndicator, setInactivityIndicator] = useState(false)
+  const [nilOverride, setNilOverride] = useState(false)
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
@@ -24,6 +25,7 @@ export default function MonthlyReturnDetail() {
       .single()
     setMonthlyReturn(ret as MonthlyReturn)
     setInactivityIndicator(!!ret?.inactivity_indicator)
+    setNilOverride(!!ret?.nil_return)
 
     if (ret) {
       const { data: c } = await supabase
@@ -99,7 +101,11 @@ export default function MonthlyReturnDetail() {
     }
     await supabase
       .from('cis_monthly_returns')
-      .update({ status: 'ready', inactivity_indicator: inactivityIndicator })
+      .update({
+        status: 'ready',
+        nil_return: nilOverride,
+        inactivity_indicator: nilOverride ? inactivityIndicator : false,
+      })
       .eq('id', monthlyReturn.id)
     load()
   }
@@ -166,6 +172,8 @@ export default function MonthlyReturnDetail() {
         status: 'submitted',
         submitted_at: new Date().toISOString(),
         filed_externally: true,
+        nil_return: nilOverride,
+        inactivity_indicator: nilOverride ? inactivityIndicator : false,
       })
       .eq('id', monthlyReturn.id)
     setMessage('Marked as filed.')
@@ -209,6 +217,10 @@ export default function MonthlyReturnDetail() {
 
   if (loading || !monthlyReturn) return <div className="p-4 text-sm text-slate-400">Loading…</div>
 
+  // While still a draft, reflect the live "nil return" toggle; once the
+  // return has moved past draft, its persisted value is the source of truth.
+  const effectiveNil = monthlyReturn.status === 'draft' ? nilOverride : monthlyReturn.nil_return
+
   const totals = lines.reduce(
     (acc, l) => ({
       gross: acc.gross + Number(l.gross_amount),
@@ -239,14 +251,15 @@ export default function MonthlyReturnDetail() {
       <div className="text-xs text-slate-400 mb-4">
         Status: {monthlyReturn.status}
         {monthlyReturn.filed_externally ? ' (filed elsewhere, recorded manually)' : ''}
-        {monthlyReturn.nil_return ? ' · Nil return' : ''}
+        {effectiveNil ? ' · Nil return' : ''}
         {monthlyReturn.is_sandbox ? ' · Sandbox' : ' · Live'}
       </div>
 
-      {monthlyReturn.nil_return ? (
+      {effectiveNil ? (
         <div className="bg-amber-50 border border-amber-200 text-amber-800 text-sm rounded-lg px-4 py-3 mb-4">
-          No finalised payments were found for this tax month. This will be submitted as a nil
-          return.
+          {lines.length > 0
+            ? 'Marked as a nil return — any figures below will be ignored when this is filed.'
+            : 'No finalised payments were found for this tax month. This will be submitted as a nil return.'}
         </div>
       ) : (
         <table className="w-full bg-white border border-slate-200 rounded-lg overflow-hidden text-sm mb-4">
@@ -286,15 +299,30 @@ export default function MonthlyReturnDetail() {
         </table>
       )}
 
-      {monthlyReturn.nil_return && monthlyReturn.status === 'draft' && (
-        <label className="flex items-center gap-2 text-sm text-slate-600 mb-4">
-          <input
-            type="checkbox"
-            checked={inactivityIndicator}
-            onChange={(e) => setInactivityIndicator(e.target.checked)}
-          />
-          No payments expected for up to 6 months (inactivity indicator)
-        </label>
+      {monthlyReturn.status === 'draft' && (
+        <div className="mb-4">
+          <label className="flex items-center gap-2 text-sm text-slate-600">
+            <input
+              type="checkbox"
+              checked={nilOverride}
+              onChange={(e) => setNilOverride(e.target.checked)}
+            />
+            This is a nil return — no subcontractors were paid this tax month
+          </label>
+          {nilOverride && (
+            <div className="mt-3 pl-6">
+              <div className="text-xs italic text-slate-500 mb-1">Inactivity</div>
+              <label className="flex items-center gap-2 text-sm text-slate-600">
+                <input
+                  type="checkbox"
+                  checked={inactivityIndicator}
+                  onChange={(e) => setInactivityIndicator(e.target.checked)}
+                />
+                I do not anticipate paying subcontractors in the next six months
+              </label>
+            </div>
+          )}
+        </div>
       )}
 
       {message && (
