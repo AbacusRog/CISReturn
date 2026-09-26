@@ -43,8 +43,17 @@ export function periodEndToTaxMonthStart(periodEnd: string): string {
   return start.toISOString().slice(0, 10)
 }
 
+// Business names like "Smith & Sons" are valid in HMRC's own submitted
+// files (and in a PDF printout of one), but a bare "&" isn't valid XML
+// unless it's escaped as an entity. Escape any "&" that isn't already the
+// start of a recognised entity reference before handing the text to the
+// XML parser.
+function escapeStrayAmpersands(xmlText: string): string {
+  return xmlText.replace(/&(?!amp;|lt;|gt;|quot;|apos;|#\d+;|#x[0-9a-fA-F]+;)/g, '&amp;')
+}
+
 export function parseCis300Xml(xmlText: string): ParsedCis300Return {
-  const doc = new DOMParser().parseFromString(xmlText, 'application/xml')
+  const doc = new DOMParser().parseFromString(escapeStrayAmpersands(xmlText), 'application/xml')
   const parserError = doc.querySelector('parsererror')
   if (parserError) {
     const detail = parserError.textContent?.trim().split('\n')[0]
