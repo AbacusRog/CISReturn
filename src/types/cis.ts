@@ -15,6 +15,7 @@ export interface Contractor {
   postcode: string | null
   contact_name: string | null
   contact_email: string | null
+  logo_path: string | null
   active: boolean
   created_at: string
   updated_at: string

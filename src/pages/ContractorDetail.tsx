@@ -6,15 +6,16 @@ import SubcontractorsTab from '../components/SubcontractorsTab'
 import PaymentsTab from '../components/PaymentsTab'
 import ImportXmlTab from '../components/ImportXmlTab'
 import ReturnsTab from '../components/ReturnsTab'
+import ContractorDetailsTab from '../components/ContractorDetailsTab'
 
-type Tab = 'subcontractors' | 'payments' | 'returns' | 'import'
+type Tab = 'details' | 'subcontractors' | 'payments' | 'returns' | 'import'
 
 export default function ContractorDetail() {
   const { contractorId } = useParams<{ contractorId: string }>()
   const [contractor, setContractor] = useState<Contractor | null>(null)
   const [tab, setTab] = useState<Tab>('subcontractors')
 
-  useEffect(() => {
+  const loadContractor = () => {
     if (!contractorId) return
     supabase
       .from('cis_contractors')
@@ -22,6 +23,11 @@ export default function ContractorDetail() {
       .eq('id', contractorId)
       .single()
       .then(({ data }) => setContractor(data as Contractor))
+  }
+
+  useEffect(() => {
+    loadContractor()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [contractorId])
 
   if (!contractorId) return null
@@ -36,6 +42,16 @@ export default function ContractorDetail() {
       </h1>
 
       <div className="flex gap-4 border-b border-slate-200 mb-4">
+        <button
+          onClick={() => setTab('details')}
+          className={`text-sm pb-2 border-b-2 -mb-px ${
+            tab === 'details'
+              ? 'border-slate-900 text-slate-900 font-medium'
+              : 'border-transparent text-slate-500'
+          }`}
+        >
+          Details
+        </button>
         <button
           onClick={() => setTab('subcontractors')}
           className={`text-sm pb-2 border-b-2 -mb-px ${
@@ -78,6 +94,7 @@ export default function ContractorDetail() {
         </button>
       </div>
 
+      {tab === 'details' && <ContractorDetailsTab contractor={contractor} onSaved={loadContractor} />}
       {tab === 'subcontractors' && <SubcontractorsTab contractorId={contractorId} />}
       {tab === 'payments' && <PaymentsTab contractorId={contractorId} />}
       {tab === 'returns' && <ReturnsTab contractorId={contractorId} />}
