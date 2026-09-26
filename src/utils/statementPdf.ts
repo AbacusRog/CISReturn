@@ -1,6 +1,7 @@
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib'
 import type { Contractor, Subcontractor, Payment } from '../types/cis'
 import { formatTaxMonthLabel } from './taxMonth'
+import type { LogoAsset } from './logo'
 
 export interface YtdTotals {
   gross: number
@@ -22,6 +23,7 @@ export async function buildStatementPdf(
   subcontractor: Subcontractor,
   payment: Payment,
   ytd?: YtdTotals,
+  logo?: LogoAsset | null,
 ): Promise<Uint8Array> {
   const doc = await PDFDocument.create()
   const page = doc.addPage([595.28, 841.89]) // A4
@@ -30,6 +32,16 @@ export async function buildStatementPdf(
 
   const margin = 50
   let y = 792
+
+  if (logo) {
+    const embedded = logo.contentType === 'image/png' ? await doc.embedPng(logo.bytes) : await doc.embedJpg(logo.bytes)
+    const maxW = 130
+    const maxH = 55
+    const scale = Math.min(maxW / embedded.width, maxH / embedded.height, 1)
+    const w = embedded.width * scale
+    const h = embedded.height * scale
+    page.drawImage(embedded, { x: 595.28 - margin - w, y: 841.89 - 40 - h, width: w, height: h })
+  }
 
   const drawText = (
     text: string,

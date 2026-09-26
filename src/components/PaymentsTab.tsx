@@ -14,6 +14,10 @@ import {
   recentTaxYearStarts,
 } from '../utils/taxMonth'
 import StatementCell from './StatementCell'
+import { loadContractorLogo } from '../utils/logo'
+import { upsertStatement, sendStatementEmail } from '../utils/statements'
+import { buildYearStatementsZip } from '../utils/bulkStatements'
+import { describeError } from '../utils/errors'
 
 interface DraftRow {
   basicPay: string
@@ -164,6 +168,9 @@ export default function PaymentsTab({ contractorId }: { contractorId: string }) 
   }
 
   const [savedId, setSavedId] = useState<string | null>(null)
+  const [bulkBusy, setBulkBusy] = useState<'download' | 'email' | null>(null)
+  const [bulkMessage, setBulkMessage] = useState<string | null>(null)
+  const [statementRefreshToken, setStatementRefreshToken] = useState(0)
 
   const handleSaveRow = async (subcontractor: Subcontractor) => {
     const row = draft[subcontractor.id] ?? emptyDraftRow
@@ -286,6 +293,84 @@ export default function PaymentsTab({ contractorId }: { contractorId: string }) 
     navigate(`/returns/${returnId}`)
   }
 
+  const handleDownloadAllStatements = async () => {
+    if (!contractor) return
+    setBulkBusy('download')
+    setBulkMessage(null)
+    try {
+      const { bytes, filename } = await buildYearStatementsZip(contractor, new Date(selectedTaxYear))
+      const blob = new Blob([bytes as BlobPart], { type: 'application/zip' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = filename
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      setBulkMessage(describeError(err))
+    } finally {
+      setBulkBusy(null)
+    }
+  }
+
+  const handleEmailAll = async () => {
+    if (!contractor) return
+    setBulkBusy('email')
+    setBulkMessage(null)
+    try {
+      const logo = await loadContractorLogo(contractor)
+      const targets = subcontractors.filter((s) => payments[s.id]?.finalised)
+      let sent = 0
+      let skipped = 0
+      const failed: string[] = []
+      for (const s of targets) {
+        if (!s.email) {
+          skipped++
+          continue
+        }
+        try {
+          const paymentRow = payments[s.id]
+          const ytd = ytdTotals[s.id]
+          const { id } = await upsertStatement(contractor, s, paymentRow, ytd, logo)
+          await sendStatementEmail(id)
+          sent++
+        } catch (err) {
+          failed.push(`${s.business_name}: ${describeError(err)}`)
+        }
+      }
+      setBulkMessage(
+        `Emailed ${sent} statement${sent === 1 ? '' : 's'}` +
+          (skipped ? ` · skipped ${skipped} with no email on file` : '') +
+          (failed.length ? ` · failed: ${failed.join('; ')}` : ''),
+      )
+      setStatementRefreshToken((t) => t + 1)
+    } catch (err) {
+      setBulkMessage(describeError(err))
+    } finally {
+      setBulkBusy(null)
+    }
+  }
+
+  // Show subcontractors with something to review first — paid this period
+  // (or, in the year-to-date view, paid this year) — then everyone else
+  // alphabetically, so a filed month's sheet doesn't bury the people who
+  // were actually paid among a long list of zero rows.
+  const sortedForPeriod = [...subcontractors].sort((a, b) => {
+    const aPaid = calcFor(a, draft[a.id] ?? emptyDraftRow).totalGross > 0
+    const bPaid = calcFor(b, draft[b.id] ?? emptyDraftRow).totalGross > 0
+    if (aPaid !== bPaid) return aPaid ? -1 : 1
+    return a.business_name.localeCompare(b.business_name)
+  })
+
+  const sortedForYtd = [...subcontractors].sort((a, b) => {
+    const aPaid = (ytdTotals[a.id]?.gross ?? 0) > 0
+    const bPaid = (ytdTotals[b.id]?.gross ?? 0) > 0
+    if (aPaid !== bPaid) return aPaid ? -1 : 1
+    return a.business_name.localeCompare(b.business_name)
+  })
+
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
@@ -327,14 +412,36 @@ export default function PaymentsTab({ contractorId }: { contractorId: string }) 
             </button>
           </div>
         </div>
-        <button
-          onClick={handleCreateReturn}
-          disabled={saving || loading}
-          className="text-sm bg-slate-900 text-white rounded px-3 py-1.5 hover:bg-slate-800 disabled:opacity-50"
-        >
-          {saving ? 'Preparing…' : 'Build monthly return →'}
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handleDownloadAllStatements}
+            disabled={bulkBusy !== null || loading}
+            className="text-xs text-slate-500 hover:text-slate-800 disabled:opacity-50"
+          >
+            {bulkBusy === 'download' ? 'Zipping…' : 'Download all statements (year)'}
+          </button>
+          <button
+            onClick={handleEmailAll}
+            disabled={bulkBusy !== null || loading || finalisedCount === 0}
+            className="text-xs text-slate-500 hover:text-slate-800 disabled:opacity-50"
+          >
+            {bulkBusy === 'email' ? 'Emailing…' : 'Email all (this period)'}
+          </button>
+          <button
+            onClick={handleCreateReturn}
+            disabled={saving || loading}
+            className="text-sm bg-slate-900 text-white rounded px-3 py-1.5 hover:bg-slate-800 disabled:opacity-50"
+          >
+            {saving ? 'Preparing…' : 'Build monthly return →'}
+          </button>
+        </div>
       </div>
+
+      {bulkMessage && (
+        <div className="mb-3 text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded px-3 py-2">
+          {bulkMessage}
+        </div>
+      )}
 
       {loading ? (
         <div className="text-sm text-slate-400">Loading…</div>
@@ -355,7 +462,7 @@ export default function PaymentsTab({ contractorId }: { contractorId: string }) 
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {subcontractors.map((s) => {
+            {sortedForYtd.map((s) => {
               const t = ytdTotals[s.id] ?? { gross: 0, materials: 0, deduction: 0, vat: 0, net: 0 }
               return (
                 <tr key={s.id}>
@@ -396,7 +503,7 @@ export default function PaymentsTab({ contractorId }: { contractorId: string }) 
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {subcontractors.map((s) => {
+            {sortedForPeriod.map((s) => {
               const row = draft[s.id] ?? emptyDraftRow
               const { deductionAmount, netAmount } = calcFor(s, row)
               const paymentRow = payments[s.id]
@@ -487,7 +594,12 @@ export default function PaymentsTab({ contractorId }: { contractorId: string }) 
                   </td>
                   <td className="px-4 py-2">
                     {finalised && contractor && paymentRow ? (
-                      <StatementCell contractor={contractor} subcontractor={s} payment={paymentRow} />
+                      <StatementCell
+                        key={`${s.id}-${statementRefreshToken}`}
+                        contractor={contractor}
+                        subcontractor={s}
+                        payment={paymentRow}
+                      />
                     ) : (
                       <span className="text-xs text-slate-300">—</span>
                     )}

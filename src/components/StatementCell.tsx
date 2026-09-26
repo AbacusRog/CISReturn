@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import type { Contractor, Payment, Subcontractor } from '../types/cis'
-import { buildStatementPdf } from '../utils/statementPdf'
 import { taxYearStart, toISODate } from '../utils/taxMonth'
+import { loadContractorLogo } from '../utils/logo'
+import { upsertStatement, sendStatementEmail } from '../utils/statements'
 
 interface Props {
   contractor: Contractor
@@ -29,9 +30,6 @@ export default function StatementCell({ contractor, subcontractor, payment }: Pr
       .maybeSingle()
       .then(({ data }) => setStatement(data as StatementRow | null))
   }, [payment.id])
-
-  const pdfPath = () =>
-    `${contractor.id}/${subcontractor.id}/${payment.tax_month_start}.pdf`
 
   const [justGenerated, setJustGenerated] = useState(false)
 
@@ -70,25 +68,9 @@ export default function StatementCell({ contractor, subcontractor, payment }: Pr
         }),
         { gross: 0, materials: 0, deduction: 0, vat: 0, net: 0 },
       )
-      const pdfBytes = await buildStatementPdf(contractor, subcontractor, payment, ytd)
-      const path = pdfPath()
-      const { error: uploadError } = await supabase.storage
-        .from('cis-statements')
-        .upload(path, pdfBytes, { contentType: 'application/pdf', upsert: true })
-      if (uploadError) throw uploadError
-
-      if (statement) {
-        await supabase.from('cis_statements').update({ pdf_path: path }).eq('id', statement.id)
-        setStatement({ ...statement, pdf_path: path })
-      } else {
-        const { data: created, error: insertError } = await supabase
-          .from('cis_statements')
-          .insert({ payment_id: payment.id, pdf_path: path })
-          .select('id, pdf_path, sent_at')
-          .single()
-        if (insertError) throw insertError
-        setStatement(created as StatementRow)
-      }
+      const logo = await loadContractorLogo(contractor)
+      const { id, pdf_path, pdfBytes } = await upsertStatement(contractor, subcontractor, payment, ytd, logo)
+      setStatement({ id, pdf_path, sent_at: statement?.sent_at ?? null })
 
       // Download immediately so generating feels like it did something,
       // rather than just quietly flipping the buttons shown below.
@@ -123,17 +105,7 @@ export default function StatementCell({ contractor, subcontractor, payment }: Pr
     setBusy('send')
     setError(null)
     try {
-      const res = await fetch('/api/send-statement', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ statementId: statement.id }),
-      })
-      const result = await res.json()
-      if (!res.ok) throw new Error(result.error ?? 'Send failed')
-      await supabase
-        .from('cis_statements')
-        .update({ sent_at: new Date().toISOString(), sent_method: 'email' })
-        .eq('id', statement.id)
+      await sendStatementEmail(statement.id)
       setStatement({ ...statement, sent_at: new Date().toISOString() })
     } catch (err) {
       setError(

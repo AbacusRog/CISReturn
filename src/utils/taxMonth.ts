@@ -71,6 +71,12 @@ export function taxYearMonths(start: Date): Date[] {
   return Array.from({ length: 12 }, (_, i) => new Date(start.getFullYear(), start.getMonth() + i, 6))
 }
 
+// "2026-2027" for the tax year starting 6 April 2026 — used in filenames,
+// where the slash-and-two-digit form of taxYearLabel() isn't safe/clear.
+export function taxYearFileLabel(start: Date): string {
+  return `${start.getFullYear()}-${start.getFullYear() + 1}`
+}
+
 // A selectable range of tax years, most recent first, for a tax-year picker.
 export function recentTaxYearStarts(count = 6, from: Date = new Date()): Date[] {
   const current = taxYearStart(currentTaxMonthStart(from))

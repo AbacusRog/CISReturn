@@ -7,7 +7,11 @@ the other Abacus internal apps.
 
 ## What's built
 
-- **Contractors** — the contractor clients Abacus acts as agent for
+- **Contractors** — the contractor clients Abacus acts as agent for, with a
+  **Details** tab per contractor for editing name/UTR/AOref/PAYE ref,
+  address and contact email, and uploading a **logo** (PNG/JPEG embed into
+  statement PDFs; SVG/WebP can be uploaded and shown in the app but aren't
+  embeddable in the PDF)
 - **Subcontractors** — per contractor, with registered details, VAT
   registration status, an optional **start date** (so a subcontractor
   doesn't appear on the Payments tab or in a monthly return for months
@@ -25,7 +29,10 @@ the other Abacus internal apps.
   This period and Year to date tables show a totals row across all columns,
   and the **This period / Year to date** switch shows cumulative
   gross/materials/deduction/VAT/net totals for each subcontractor across the
-  selected CIS tax year
+  selected CIS tax year. Both tables show **paid subcontractors first**
+  (anyone finalised this period, or with year-to-date figures above zero),
+  so a filed month's sheet doesn't bury who was actually paid among a long
+  list of zero rows
 - **Import from HMRC** — a tab on each contractor for bulk-importing
   historical months from the GovTalk CIS300 XML files already submitted to
   HMRC (e.g. exported from previous CIS software such as BrightPay). Each
@@ -41,7 +48,15 @@ the other Abacus internal apps.
   the statement PDF client-side (stored in Supabase Storage under
   `cis-statements`), download it, or email it to the subcontractor via
   Resend (needs `RESEND_API_KEY` / `RESEND_FROM_EMAIL` set — see Setup). Each
-  statement shows both the period's figures and a year-to-date summary
+  statement shows both the period's figures and a year-to-date summary, plus
+  the contractor's logo (when one's been uploaded on the Details tab). Two
+  bulk actions sit above the Payments table: **"Download all statements
+  (year)"** builds one combined PDF per subcontractor covering every
+  finalised month in the selected tax year (named `<Subcontractor name> -
+  2026-2027.pdf`) and bundles them into a single zip; **"Email all (this
+  period)"** generates and sends that month's statement to every finalised
+  subcontractor with an email address on file, skipping and reporting on
+  anyone without one
 
 ## What is NOT yet working: the actual HMRC submission
 
