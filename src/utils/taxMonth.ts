@@ -58,3 +58,21 @@ export function taxYearStart(taxMonthStart: Date): Date {
   const taxYearBeginsThisCalendarYear = month >= 3 // Apr(6th)–Dec, or Jan–Mar counts as previous
   return new Date(taxYearBeginsThisCalendarYear ? year : year - 1, 3, 6)
 }
+
+// "2026/27" for the tax year starting 6 April 2026.
+export function taxYearLabel(start: Date): string {
+  const startYear = start.getFullYear()
+  return `${startYear}/${String((startYear + 1) % 100).padStart(2, '0')}`
+}
+
+// The 12 tax month starts (6th of each month) making up the tax year that
+// begins on the given date — 6 Apr through 6 Mar of the following year.
+export function taxYearMonths(start: Date): Date[] {
+  return Array.from({ length: 12 }, (_, i) => new Date(start.getFullYear(), start.getMonth() + i, 6))
+}
+
+// A selectable range of tax years, most recent first, for a tax-year picker.
+export function recentTaxYearStarts(count = 6, from: Date = new Date()): Date[] {
+  const current = taxYearStart(currentTaxMonthStart(from))
+  return Array.from({ length: count }, (_, i) => new Date(current.getFullYear() - i, 3, 6))
+}

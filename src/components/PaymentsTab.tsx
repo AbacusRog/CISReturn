@@ -6,9 +6,12 @@ import { calculatePayment } from '../utils/cisCalc'
 import {
   currentTaxMonthStart,
   formatTaxMonthLabel,
+  taxMonthEnd,
   toISODate,
-  previousTaxMonths,
   taxYearStart,
+  taxYearMonths,
+  taxYearLabel,
+  recentTaxYearStarts,
 } from '../utils/taxMonth'
 import StatementCell from './StatementCell'
 
@@ -31,7 +34,10 @@ interface YtdTotals {
 
 export default function PaymentsTab({ contractorId }: { contractorId: string }) {
   const navigate = useNavigate()
-  const months = previousTaxMonths(12)
+  const currentTaxYear = taxYearStart(currentTaxMonthStart())
+  const taxYearOptions = recentTaxYearStarts(6)
+  const [selectedTaxYear, setSelectedTaxYear] = useState(toISODate(currentTaxYear))
+  const months = taxYearMonths(new Date(selectedTaxYear))
   const [selectedMonth, setSelectedMonth] = useState(toISODate(currentTaxMonthStart()))
   const [view, setView] = useState<'period' | 'ytd'>('period')
   const [contractor, setContractor] = useState<Contractor | null>(null)
@@ -51,6 +57,17 @@ export default function PaymentsTab({ contractorId }: { contractorId: string }) 
       .then(({ data }) => setContractor(data as Contractor))
   }, [contractorId])
 
+  // Keep the month selector inside whichever tax year is picked — jump to
+  // that year's first month unless the currently selected month already
+  // falls within it (e.g. switching years while browsing the same slot).
+  useEffect(() => {
+    const monthsInYear = taxYearMonths(new Date(selectedTaxYear)).map(toISODate)
+    if (!monthsInYear.includes(selectedMonth)) {
+      setSelectedMonth(monthsInYear[0])
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedTaxYear])
+
   const load = async () => {
     setLoading(true)
     const [{ data: subs }, { data: pays }] = await Promise.all([
@@ -66,12 +83,19 @@ export default function PaymentsTab({ contractorId }: { contractorId: string }) 
         .eq('contractor_id', contractorId)
         .eq('tax_month_start', selectedMonth),
     ])
-    setSubcontractors((subs as Subcontractor[]) ?? [])
+    // Exclude subcontractors who hadn't started yet as of this tax month,
+    // so they don't get a payment row (and so don't end up in the monthly
+    // return) for periods before they actually began work.
+    const monthEnd = toISODate(taxMonthEnd(new Date(selectedMonth)))
+    const eligibleSubs = ((subs as Subcontractor[]) ?? []).filter(
+      (s) => !s.start_date || s.start_date <= monthEnd,
+    )
+    setSubcontractors(eligibleSubs)
     const map: Record<string, Payment> = {}
     for (const p of (pays as Payment[]) ?? []) map[p.subcontractor_id] = p
     setPayments(map)
     const nextDraft: Record<string, DraftRow> = {}
-    for (const s of (subs as Subcontractor[]) ?? []) {
+    for (const s of eligibleSubs) {
       const existing = map[s.id]
       nextDraft[s.id] = existing
         ? {
@@ -170,6 +194,35 @@ export default function PaymentsTab({ contractorId }: { contractorId: string }) 
     return sum + calcFor(s, row).totalGross
   }, 0)
 
+  const periodColumnTotals = subcontractors.reduce(
+    (acc, s) => {
+      const row = draft[s.id] ?? emptyDraftRow
+      const { deductionAmount, netAmount } = calcFor(s, row)
+      acc.basicPay += parseFloat(row.basicPay || '0') || 0
+      acc.materials += parseFloat(row.materials || '0') || 0
+      acc.vat += s.vat_registered ? parseFloat(row.vat || '0') || 0 : 0
+      acc.deduction += deductionAmount
+      acc.net += netAmount
+      return acc
+    },
+    { basicPay: 0, materials: 0, vat: 0, deduction: 0, net: 0 },
+  )
+
+  const ytdColumnTotals = subcontractors.reduce(
+    (acc, s) => {
+      const t = ytdTotals[s.id]
+      if (t) {
+        acc.gross += t.gross
+        acc.materials += t.materials
+        acc.deduction += t.deduction
+        acc.vat += t.vat
+        acc.net += t.net
+      }
+      return acc
+    },
+    { gross: 0, materials: 0, deduction: 0, vat: 0, net: 0 },
+  )
+
   const handleCreateReturn = async () => {
     setSaving(true)
     // Finalise any payments with amounts entered for this month
@@ -224,6 +277,17 @@ export default function PaymentsTab({ contractorId }: { contractorId: string }) 
     <div>
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-3">
+          <select
+            value={selectedTaxYear}
+            onChange={(e) => setSelectedTaxYear(e.target.value)}
+            className="rounded border border-slate-300 px-2 py-1.5 text-sm"
+          >
+            {taxYearOptions.map((y) => (
+              <option key={toISODate(y)} value={toISODate(y)}>
+                Tax year {taxYearLabel(y)}
+              </option>
+            ))}
+          </select>
           <select
             value={selectedMonth}
             onChange={(e) => setSelectedMonth(e.target.value)}
@@ -292,6 +356,16 @@ export default function PaymentsTab({ contractorId }: { contractorId: string }) 
               )
             })}
           </tbody>
+          <tfoot className="bg-slate-50 font-medium text-slate-900 border-t border-slate-200">
+            <tr>
+              <td className="px-4 py-2">Total</td>
+              <td className="px-4 py-2">{ytdColumnTotals.gross.toFixed(2)}</td>
+              <td className="px-4 py-2">{ytdColumnTotals.materials.toFixed(2)}</td>
+              <td className="px-4 py-2">{ytdColumnTotals.deduction.toFixed(2)}</td>
+              <td className="px-4 py-2">{ytdColumnTotals.vat.toFixed(2)}</td>
+              <td className="px-4 py-2">{ytdColumnTotals.net.toFixed(2)}</td>
+            </tr>
+          </tfoot>
         </table>
       ) : (
         <table className="w-full bg-white border border-slate-200 rounded-lg overflow-hidden text-sm">
@@ -407,6 +481,19 @@ export default function PaymentsTab({ contractorId }: { contractorId: string }) 
               )
             })}
           </tbody>
+          <tfoot className="bg-slate-50 font-medium text-slate-900 border-t border-slate-200">
+            <tr>
+              <td className="px-4 py-2">Total</td>
+              <td className="px-4 py-2">{periodColumnTotals.basicPay.toFixed(2)}</td>
+              <td className="px-4 py-2">{periodColumnTotals.materials.toFixed(2)}</td>
+              <td className="px-4 py-2">{periodColumnTotals.vat.toFixed(2)}</td>
+              <td className="px-4 py-2"></td>
+              <td className="px-4 py-2">{periodColumnTotals.deduction.toFixed(2)}</td>
+              <td className="px-4 py-2">{periodColumnTotals.net.toFixed(2)}</td>
+              <td className="px-4 py-2"></td>
+              <td className="px-4 py-2"></td>
+            </tr>
+          </tfoot>
         </table>
       )}
 

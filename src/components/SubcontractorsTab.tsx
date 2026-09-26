@@ -12,6 +12,7 @@ const emptyForm = {
   email: '',
   deduction_rate: '30' as string,
   vat_registered: false,
+  start_date: '',
   active: true,
   verification_number: '',
   verified_at: '',
@@ -78,6 +79,7 @@ export default function SubcontractorsTab({ contractorId }: { contractorId: stri
       email: s.email ?? '',
       deduction_rate: String(s.deduction_rate),
       vat_registered: s.vat_registered,
+      start_date: s.start_date ?? '',
       active: s.active,
       verification_number: s.verification_number ?? '',
       verified_at: s.verified_at ? s.verified_at.slice(0, 10) : '',
@@ -102,6 +104,7 @@ export default function SubcontractorsTab({ contractorId }: { contractorId: stri
       email: form.email || null,
       deduction_rate: Number(form.deduction_rate) as DeductionRate,
       vat_registered: form.vat_registered,
+      start_date: form.start_date || null,
       active: form.active,
     }
 
@@ -415,6 +418,21 @@ export default function SubcontractorsTab({ contractorId }: { contractorId: stri
               />
               VAT registered
             </label>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">
+              Start date
+            </label>
+            <input
+              type="date"
+              value={form.start_date}
+              onChange={(e) => setForm({ ...form, start_date: e.target.value })}
+              className="w-full rounded border border-slate-300 px-2 py-1.5 text-sm"
+            />
+            <div className="text-[11px] text-slate-400 mt-1">
+              Leave blank if unknown. Months before this date won't show them on the Payments tab
+              or count towards a monthly return.
+            </div>
           </div>
           {editingId && (
             <>

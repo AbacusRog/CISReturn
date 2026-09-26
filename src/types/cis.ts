@@ -43,6 +43,7 @@ export interface Subcontractor {
   verification_status: VerificationStatus
   verified_at: string | null
   vat_registered: boolean
+  start_date: string | null
   active: boolean
   notes: string | null
   created_at: string

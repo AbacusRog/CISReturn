@@ -9,17 +9,23 @@ the other Abacus internal apps.
 
 - **Contractors** — the contractor clients Abacus acts as agent for
 - **Subcontractors** — per contractor, with registered details, VAT
-  registration status, and a "Verify with HMRC" action. Can also be bulk
-  added via **CSV import** (with a downloadable template) instead of
-  entering them one at a time
+  registration status, an optional **start date** (so a subcontractor
+  doesn't appear on the Payments tab or in a monthly return for months
+  before they actually began work), and a "Verify with HMRC" action. Can
+  also be bulk added via **CSV import** (with a downloadable template)
+  instead of entering them one at a time
 - **Payments** — monthly basic pay / materials / VAT / deduction entry per
-  subcontractor, with the tax-month-based due dates CIS uses (6th–5th).
-  Materials can either be added on top of basic pay or already be included
-  in it (a toggle per row); VAT is only shown for subcontractors flagged as
-  VAT registered, and is added to the net payment without affecting the CIS
-  deduction. A **This period / Year to date** switch shows cumulative
+  subcontractor, with the tax-month-based due dates CIS uses (6th–5th). A
+  **tax year selector** (defaulting to the current CIS tax year, 6
+  April–5 April) limits the month dropdown to that year's 12 months, with
+  older years selectable from the same control. Materials can either be
+  added on top of basic pay or already be included in it (a toggle per
+  row); VAT is only shown for subcontractors flagged as VAT registered, and
+  is added to the net payment without affecting the CIS deduction. Both the
+  This period and Year to date tables show a totals row across all columns,
+  and the **This period / Year to date** switch shows cumulative
   gross/materials/deduction/VAT/net totals for each subcontractor across the
-  current CIS tax year (6 April–5 April)
+  selected CIS tax year
 - **Import from HMRC** — a tab on each contractor for bulk-importing
   historical months from the GovTalk CIS300 XML files already submitted to
   HMRC (e.g. exported from previous CIS software such as BrightPay). Each
