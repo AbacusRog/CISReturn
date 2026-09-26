@@ -6,6 +6,7 @@ import {
   parseCis300Xml,
   type ParsedCis300Return,
 } from '../utils/parseCis300Xml'
+import { extractXmlFromPdf } from '../utils/extractXmlFromPdf'
 import { formatTaxMonthLabel } from '../utils/taxMonth'
 
 interface FileResult {
@@ -34,7 +35,8 @@ export default function ImportXmlTab({
     const parsedResults: FileResult[] = []
     for (const file of Array.from(files)) {
       try {
-        const text = await file.text()
+        const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')
+        const text = isPdf ? await extractXmlFromPdf(file) : await file.text()
         const parsed = parseCis300Xml(text)
         parsedResults.push({ fileName: file.name, parsed })
       } catch (err) {
@@ -203,14 +205,15 @@ export default function ImportXmlTab({
         </div>
         <p className="text-xs text-slate-400 mb-3">
           Upload the GovTalk XML file(s) that were submitted to HMRC for earlier months (e.g.
-          exported from your previous CIS software). Each file creates a finalised monthly return
-          and its payments here, matching subcontractors by UTR, NI number, or company number, and
-          adding any that don't already exist.
+          exported from your previous CIS software) — either the raw <code>.xml</code> file, or a
+          PDF printout of the submission that contains the full XML text (both work). Each file
+          creates a finalised monthly return and its payments here, matching subcontractors by
+          UTR, NI number, or company number, and adding any that don't already exist.
         </p>
         <input
           ref={fileInputRef}
           type="file"
-          accept=".xml,text/xml,application/xml"
+          accept=".xml,text/xml,application/xml,.pdf,application/pdf"
           multiple
           onChange={(e) => e.target.files && handleFilesSelected(e.target.files)}
           className="text-sm"
