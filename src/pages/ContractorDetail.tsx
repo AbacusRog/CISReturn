@@ -4,8 +4,9 @@ import { supabase } from '../lib/supabase'
 import type { Contractor } from '../types/cis'
 import SubcontractorsTab from '../components/SubcontractorsTab'
 import PaymentsTab from '../components/PaymentsTab'
+import ImportXmlTab from '../components/ImportXmlTab'
 
-type Tab = 'subcontractors' | 'payments'
+type Tab = 'subcontractors' | 'payments' | 'import'
 
 export default function ContractorDetail() {
   const { contractorId } = useParams<{ contractorId: string }>()
@@ -54,10 +55,21 @@ export default function ContractorDetail() {
         >
           Payments
         </button>
+        <button
+          onClick={() => setTab('import')}
+          className={`text-sm pb-2 border-b-2 -mb-px ${
+            tab === 'import'
+              ? 'border-slate-900 text-slate-900 font-medium'
+              : 'border-transparent text-slate-500'
+          }`}
+        >
+          Import from HMRC
+        </button>
       </div>
 
       {tab === 'subcontractors' && <SubcontractorsTab contractorId={contractorId} />}
       {tab === 'payments' && <PaymentsTab contractorId={contractorId} />}
+      {tab === 'import' && <ImportXmlTab contractorId={contractorId} contractor={contractor} />}
     </div>
   )
 }

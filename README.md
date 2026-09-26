@@ -20,6 +20,14 @@ the other Abacus internal apps.
   deduction. A **This period / Year to date** switch shows cumulative
   gross/materials/deduction/VAT/net totals for each subcontractor across the
   current CIS tax year (6 April–5 April)
+- **Import from HMRC** — a tab on each contractor for bulk-importing
+  historical months from the GovTalk CIS300 XML files already submitted to
+  HMRC (e.g. exported from previous CIS software such as BrightPay). Each
+  file becomes a finalised, "submitted" monthly return with its payments,
+  matching subcontractors by UTR/NI number/company number and creating any
+  that don't already exist; already-imported months are skipped
+  automatically. The deduction rate isn't transmitted in the XML itself, so
+  it's inferred from the TotalPayments/CostOfMaterials/TotalDeducted figures
 - **Monthly Returns** — builds a CIS300 from finalised payments for a tax
   month (including nil returns), tracks status through draft → ready →
   submitted
