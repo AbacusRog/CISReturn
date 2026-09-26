@@ -28,7 +28,15 @@ export function formatTaxMonthLabel(start: Date): string {
 }
 
 export function toISODate(d: Date): string {
-  return d.toISOString().slice(0, 10)
+  // Build the date string from local date parts rather than toISOString(),
+  // which converts to UTC first — during British Summer Time (UTC+1) that
+  // silently shifts a local midnight (e.g. the 6th) back to the previous
+  // day (the 5th), corrupting which tax month a payment or return belongs
+  // to for roughly half the year.
+  const year = d.getFullYear()
+  const month = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
 }
 
 export function previousTaxMonths(count: number, from: Date = new Date()): Date[] {

@@ -14,6 +14,8 @@ interface FileResult {
   parsed?: ParsedCis300Return
   error?: string
   alreadyImported?: boolean
+  existingReturnId?: string
+  replace?: boolean
 }
 
 export default function ImportXmlTab({
@@ -53,12 +55,20 @@ export default function ImportXmlTab({
     if (months.length > 0) {
       const { data: existing } = await supabase
         .from('cis_monthly_returns')
-        .select('tax_month_start')
+        .select('id, tax_month_start')
         .eq('contractor_id', contractorId)
         .in('tax_month_start', months)
-      const existingMonths = new Set((existing ?? []).map((r: { tax_month_start: string }) => r.tax_month_start))
+      const existingByMonth = new Map(
+        (existing ?? []).map((r: { id: string; tax_month_start: string }) => [
+          r.tax_month_start,
+          r.id,
+        ]),
+      )
       for (const r of parsedResults) {
-        if (r.parsed && existingMonths.has(r.parsed.taxMonthStart)) r.alreadyImported = true
+        if (r.parsed && existingByMonth.has(r.parsed.taxMonthStart)) {
+          r.alreadyImported = true
+          r.existingReturnId = existingByMonth.get(r.parsed.taxMonthStart)
+        }
       }
     }
 
@@ -66,7 +76,15 @@ export default function ImportXmlTab({
     setChecking(false)
   }
 
-  const importableResults = results.filter((r) => r.parsed && !r.error && !r.alreadyImported)
+  const importableResults = results.filter(
+    (r) => r.parsed && !r.error && (!r.alreadyImported || r.replace),
+  )
+
+  const toggleReplace = (index: number) => {
+    setResults((prev) =>
+      prev.map((r, i) => (i === index ? { ...r, replace: !r.replace } : r)),
+    )
+  }
 
   const handleImport = async () => {
     setImporting(true)
@@ -120,6 +138,20 @@ export default function ImportXmlTab({
     try {
       for (const result of importableResults) {
         const parsed = result.parsed!
+
+        if (result.replace && result.existingReturnId) {
+          // Replacing a previously imported (or otherwise wrong) month:
+          // clear out its old return lines and payments first, so the fresh
+          // import isn't left alongside stale, incorrect figures.
+          await supabase.from('cis_return_lines').delete().eq('monthly_return_id', result.existingReturnId)
+          await supabase
+            .from('cis_payments')
+            .delete()
+            .eq('contractor_id', contractorId)
+            .eq('tax_month_start', parsed.taxMonthStart)
+          await supabase.from('cis_monthly_returns').delete().eq('id', result.existingReturnId)
+        }
+
         const { data: newReturn, error: returnError } = await supabase
           .from('cis_monthly_returns')
           .insert({
@@ -138,6 +170,11 @@ export default function ImportXmlTab({
         for (const parsedSub of parsed.subcontractors) {
           const subcontractor = await findOrCreateSubcontractor(parsedSub)
           const rate = inferDeductionRate(parsedSub)
+          // HMRC's TotalPayments is the gross figure INCLUDING materials;
+          // CostOfMaterials is the labour-excluded portion within it. We
+          // store basic_pay as the labour-only figure, so materials must be
+          // flagged as "added on top" of it to reconstruct the same gross
+          // and taxable amounts the return was actually filed with.
           const basicPay = Math.max(0, parsedSub.totalPayments - parsedSub.costOfMaterials)
           const netAmount = parsedSub.totalPayments - parsedSub.totalDeducted
 
@@ -149,7 +186,7 @@ export default function ImportXmlTab({
               tax_month_start: parsed.taxMonthStart,
               basic_pay: basicPay,
               materials_amount: parsedSub.costOfMaterials,
-              materials_on_top: false,
+              materials_on_top: true,
               vat_amount: 0,
               gross_amount: parsedSub.totalPayments,
               deduction_rate: rate as DeductionRate,
@@ -208,7 +245,9 @@ export default function ImportXmlTab({
           exported from your previous CIS software) — either the raw <code>.xml</code> file, or a
           PDF printout of the submission that contains the full XML text (both work). Each file
           creates a finalised monthly return and its payments here, matching subcontractors by
-          UTR, NI number, or company number, and adding any that don't already exist.
+          UTR, NI number, or company number, and adding any that don't already exist. A month
+          that's already been imported is skipped by default — tick "replace" on it if you need to
+          re-import with corrected figures.
         </p>
         <input
           ref={fileInputRef}
@@ -262,7 +301,18 @@ export default function ImportXmlTab({
                     {r.error ? (
                       <span className="text-red-600">{r.error}</span>
                     ) : r.alreadyImported ? (
-                      <span className="text-slate-400">Already imported — skipped</span>
+                      <label className="flex items-center gap-1.5 text-slate-500">
+                        <input
+                          type="checkbox"
+                          checked={!!r.replace}
+                          onChange={() => toggleReplace(i)}
+                        />
+                        {r.replace ? (
+                          <span className="text-amber-600">Will replace existing import</span>
+                        ) : (
+                          <span>Already imported — tick to replace</span>
+                        )}
+                      </label>
                     ) : (
                       <span className="text-green-600">Ready</span>
                     )}

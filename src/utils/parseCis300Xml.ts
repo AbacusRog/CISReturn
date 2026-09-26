@@ -37,10 +37,15 @@ function num(el: Element | null | undefined): number {
 
 export function periodEndToTaxMonthStart(periodEnd: string): string {
   // periodEnd is always the 5th of a month; the tax month it closes began
-  // on the 6th of the previous month.
+  // on the 6th of the previous month. Built from local date parts (not
+  // toISOString(), which converts to UTC and can shift a local midnight
+  // back a day during British Summer Time) so this always lands on the 6th.
   const d = new Date(periodEnd + 'T00:00:00')
   const start = new Date(d.getFullYear(), d.getMonth() - 1, 6)
-  return start.toISOString().slice(0, 10)
+  const year = start.getFullYear()
+  const month = String(start.getMonth() + 1).padStart(2, '0')
+  const day = String(start.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
 }
 
 // Business names like "Smith & Sons" are valid in HMRC's own submitted
