@@ -5,8 +5,9 @@ import type { Contractor } from '../types/cis'
 import SubcontractorsTab from '../components/SubcontractorsTab'
 import PaymentsTab from '../components/PaymentsTab'
 import ImportXmlTab from '../components/ImportXmlTab'
+import ReturnsTab from '../components/ReturnsTab'
 
-type Tab = 'subcontractors' | 'payments' | 'import'
+type Tab = 'subcontractors' | 'payments' | 'returns' | 'import'
 
 export default function ContractorDetail() {
   const { contractorId } = useParams<{ contractorId: string }>()
@@ -56,6 +57,16 @@ export default function ContractorDetail() {
           Payments
         </button>
         <button
+          onClick={() => setTab('returns')}
+          className={`text-sm pb-2 border-b-2 -mb-px ${
+            tab === 'returns'
+              ? 'border-slate-900 text-slate-900 font-medium'
+              : 'border-transparent text-slate-500'
+          }`}
+        >
+          Returns
+        </button>
+        <button
           onClick={() => setTab('import')}
           className={`text-sm pb-2 border-b-2 -mb-px ${
             tab === 'import'
@@ -69,6 +80,7 @@ export default function ContractorDetail() {
 
       {tab === 'subcontractors' && <SubcontractorsTab contractorId={contractorId} />}
       {tab === 'payments' && <PaymentsTab contractorId={contractorId} />}
+      {tab === 'returns' && <ReturnsTab contractorId={contractorId} />}
       {tab === 'import' && <ImportXmlTab contractorId={contractorId} contractor={contractor} />}
     </div>
   )
