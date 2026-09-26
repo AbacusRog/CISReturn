@@ -81,6 +81,7 @@ export interface MonthlyReturn {
   correlation_id: string | null
   hmrc_response: unknown | null
   is_sandbox: boolean
+  filed_externally: boolean
   created_at: string
   updated_at: string
 }

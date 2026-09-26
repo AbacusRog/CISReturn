@@ -125,9 +125,50 @@ export default function MonthlyReturnDetail() {
         submitted_at: null,
         correlation_id: null,
         hmrc_response: null,
+        filed_externally: false,
       })
       .eq('id', monthlyReturn.id)
     setMessage('Return reopened — go back to Payments to make changes, then rebuild it.')
+    load()
+  }
+
+  const handleMarkFiled = async () => {
+    if (!monthlyReturn) return
+    if (
+      !confirm(
+        'Mark this return as filed? Use this only if it has already been submitted to HMRC by another method (e.g. different software) — this just records that here without sending anything.',
+      )
+    )
+      return
+    // Persist the return lines as a snapshot, same as marking ready, so the
+    // filed figures are locked in even if payments change afterwards.
+    const draftLines = lines.filter((l) => l.id.startsWith('draft-'))
+    if (draftLines.length > 0) {
+      await supabase.from('cis_return_lines').insert(
+        draftLines.map((l) => ({
+          monthly_return_id: monthlyReturn.id,
+          payment_id: l.payment_id,
+          subcontractor_id: l.subcontractor_id,
+          business_name: l.business_name,
+          utr: l.utr,
+          ni_number: l.ni_number,
+          verification_number: l.verification_number,
+          gross_amount: l.gross_amount,
+          materials_amount: l.materials_amount,
+          deduction_rate: l.deduction_rate,
+          deduction_amount: l.deduction_amount,
+        })),
+      )
+    }
+    await supabase
+      .from('cis_monthly_returns')
+      .update({
+        status: 'submitted',
+        submitted_at: new Date().toISOString(),
+        filed_externally: true,
+      })
+      .eq('id', monthlyReturn.id)
+    setMessage('Marked as filed.')
     load()
   }
 
@@ -179,14 +220,25 @@ export default function MonthlyReturnDetail() {
 
   return (
     <div>
-      <Link to="/returns" className="text-xs text-slate-400 hover:text-slate-600">
-        ← All returns
-      </Link>
+      <div className="flex items-center gap-3">
+        <Link to="/returns" className="text-xs text-slate-400 hover:text-slate-600">
+          ← All returns
+        </Link>
+        {monthlyReturn.contractor_id && (
+          <Link
+            to={`/contractors/${monthlyReturn.contractor_id}`}
+            className="text-xs text-slate-400 hover:text-slate-600"
+          >
+            ← Back to {contractor?.name ?? 'contractor'}
+          </Link>
+        )}
+      </div>
       <h1 className="text-lg font-semibold text-slate-900 mt-1 mb-1">
         {contractor?.name} — {formatTaxMonthLabel(new Date(monthlyReturn.tax_month_start))}
       </h1>
       <div className="text-xs text-slate-400 mb-4">
         Status: {monthlyReturn.status}
+        {monthlyReturn.filed_externally ? ' (filed elsewhere, recorded manually)' : ''}
         {monthlyReturn.nil_return ? ' · Nil return' : ''}
         {monthlyReturn.is_sandbox ? ' · Sandbox' : ' · Live'}
       </div>
@@ -253,12 +305,20 @@ export default function MonthlyReturnDetail() {
 
       <div className="flex gap-3">
         {monthlyReturn.status === 'draft' && (
-          <button
-            onClick={handleMarkReady}
-            className="text-sm bg-slate-900 text-white rounded px-3 py-1.5 hover:bg-slate-800"
-          >
-            Mark ready for submission
-          </button>
+          <>
+            <button
+              onClick={handleMarkReady}
+              className="text-sm bg-slate-900 text-white rounded px-3 py-1.5 hover:bg-slate-800"
+            >
+              Mark ready for submission
+            </button>
+            <button
+              onClick={handleMarkFiled}
+              className="text-sm text-slate-500 hover:text-slate-800 px-3 py-1.5"
+            >
+              Mark as filed elsewhere
+            </button>
+          </>
         )}
         {monthlyReturn.status === 'ready' && (
           <>
@@ -268,6 +328,12 @@ export default function MonthlyReturnDetail() {
               className="text-sm bg-slate-900 text-white rounded px-3 py-1.5 hover:bg-slate-800 disabled:opacity-50"
             >
               {submitting ? 'Submitting…' : 'Submit to HMRC (sandbox)'}
+            </button>
+            <button
+              onClick={handleMarkFiled}
+              className="text-sm text-slate-500 hover:text-slate-800 px-3 py-1.5"
+            >
+              Mark as filed elsewhere
             </button>
             <button
               onClick={handleReopen}
@@ -280,7 +346,11 @@ export default function MonthlyReturnDetail() {
         {(monthlyReturn.status === 'submitted' || monthlyReturn.status === 'accepted' || monthlyReturn.status === 'rejected') && (
           <>
             <span className="text-sm text-slate-500">
-              {monthlyReturn.status === 'rejected' ? 'Rejected' : 'Submitted'}
+              {monthlyReturn.status === 'rejected'
+                ? 'Rejected'
+                : monthlyReturn.filed_externally
+                  ? 'Filed elsewhere (recorded manually)'
+                  : 'Submitted'}
               {monthlyReturn.submitted_at ? ` ${new Date(monthlyReturn.submitted_at).toLocaleString('en-GB')}` : ''}
               {monthlyReturn.correlation_id ? ` · Correlation ID: ${monthlyReturn.correlation_id}` : ''}
             </span>

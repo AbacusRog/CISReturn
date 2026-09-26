@@ -106,22 +106,19 @@ export default function SubcontractorsTab({ contractorId }: { contractorId: stri
       vat_registered: form.vat_registered,
       start_date: form.start_date || null,
       active: form.active,
+      verification_number: form.verification_number || null,
+      verified_at: form.verified_at ? new Date(form.verified_at).toISOString() : null,
+      // Entering a verification number manually (e.g. verified outside this
+      // app, or before the HMRC integration is live) counts as verified.
+      verification_status: form.verification_number.trim() ? 'verified' : 'unverified',
     }
 
     if (editingId) {
-      payload.verification_number = form.verification_number || null
-      payload.verified_at = form.verified_at ? new Date(form.verified_at).toISOString() : null
-      // Entering a verification number manually (e.g. verified outside this
-      // app, or before the HMRC integration is live) counts as verified.
-      if (form.verification_number.trim()) {
-        payload.verification_status = 'verified'
-      }
       await supabase.from('cis_subcontractors').update(payload).eq('id', editingId)
     } else {
       await supabase.from('cis_subcontractors').insert({
         ...payload,
         contractor_id: contractorId,
-        verification_status: 'unverified',
       })
     }
     cancelForm()
@@ -434,60 +431,56 @@ export default function SubcontractorsTab({ contractorId }: { contractorId: stri
               or count towards a monthly return.
             </div>
           </div>
-          {editingId && (
-            <>
-              <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">
-                  Deduction rate
-                </label>
-                <select
-                  value={form.deduction_rate}
-                  onChange={(e) => setForm({ ...form, deduction_rate: e.target.value })}
-                  className="w-full rounded border border-slate-300 px-2 py-1.5 text-sm"
-                >
-                  <option value="0">0% (gross status)</option>
-                  <option value="20">20% (verified)</option>
-                  <option value="30">30% (unverified / higher rate)</option>
-                </select>
-              </div>
-              <div className="flex items-end">
-                <label className="flex items-center gap-2 text-sm text-slate-600">
-                  <input
-                    type="checkbox"
-                    checked={form.active}
-                    onChange={(e) => setForm({ ...form, active: e.target.checked })}
-                  />
-                  Active
-                </label>
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">
-                  Verification number
-                </label>
-                <input
-                  value={form.verification_number}
-                  onChange={(e) => setForm({ ...form, verification_number: e.target.value })}
-                  placeholder="e.g. V1393482866"
-                  className="w-full rounded border border-slate-300 px-2 py-1.5 text-sm"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">
-                  Verification date
-                </label>
-                <input
-                  type="date"
-                  value={form.verified_at}
-                  onChange={(e) => setForm({ ...form, verified_at: e.target.value })}
-                  className="w-full rounded border border-slate-300 px-2 py-1.5 text-sm"
-                />
-              </div>
-              <div className="col-span-2 text-xs text-slate-400 -mt-2">
-                Fill these in if the subcontractor was already verified with HMRC elsewhere.
-                Entering a verification number marks them as verified.
-              </div>
-            </>
-          )}
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">
+              Deduction rate
+            </label>
+            <select
+              value={form.deduction_rate}
+              onChange={(e) => setForm({ ...form, deduction_rate: e.target.value })}
+              className="w-full rounded border border-slate-300 px-2 py-1.5 text-sm"
+            >
+              <option value="0">0% (gross status)</option>
+              <option value="20">20% (verified)</option>
+              <option value="30">30% (unverified / higher rate)</option>
+            </select>
+          </div>
+          <div className="flex items-end">
+            <label className="flex items-center gap-2 text-sm text-slate-600">
+              <input
+                type="checkbox"
+                checked={form.active}
+                onChange={(e) => setForm({ ...form, active: e.target.checked })}
+              />
+              Active
+            </label>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">
+              Verification number
+            </label>
+            <input
+              value={form.verification_number}
+              onChange={(e) => setForm({ ...form, verification_number: e.target.value })}
+              placeholder="e.g. V1393482866"
+              className="w-full rounded border border-slate-300 px-2 py-1.5 text-sm"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1">
+              Verification date
+            </label>
+            <input
+              type="date"
+              value={form.verified_at}
+              onChange={(e) => setForm({ ...form, verified_at: e.target.value })}
+              className="w-full rounded border border-slate-300 px-2 py-1.5 text-sm"
+            />
+          </div>
+          <div className="col-span-2 text-xs text-slate-400 -mt-2">
+            Fill these in if the subcontractor was already verified with HMRC elsewhere. Entering a
+            verification number marks them as verified.
+          </div>
           <div className="col-span-2">
             <button
               type="submit"

@@ -146,11 +146,9 @@ export default function PaymentsTab({ contractorId }: { contractorId: string }) 
       deductionRate: s.deduction_rate,
     })
 
-  const handleSaveRow = async (subcontractor: Subcontractor) => {
-    const row = draft[subcontractor.id] ?? emptyDraftRow
+  const buildPaymentPayload = (subcontractor: Subcontractor, row: DraftRow) => {
     const { totalGross, deductionAmount, netAmount } = calcFor(subcontractor, row)
-    const existing = payments[subcontractor.id]
-    const payload = {
+    return {
       contractor_id: contractorId,
       subcontractor_id: subcontractor.id,
       tax_month_start: selectedMonth,
@@ -163,11 +161,21 @@ export default function PaymentsTab({ contractorId }: { contractorId: string }) 
       deduction_amount: deductionAmount,
       net_amount: netAmount,
     }
+  }
+
+  const [savedId, setSavedId] = useState<string | null>(null)
+
+  const handleSaveRow = async (subcontractor: Subcontractor) => {
+    const row = draft[subcontractor.id] ?? emptyDraftRow
+    const existing = payments[subcontractor.id]
+    const payload = buildPaymentPayload(subcontractor, row)
     if (existing) {
       await supabase.from('cis_payments').update(payload).eq('id', existing.id)
     } else {
       await supabase.from('cis_payments').insert(payload)
     }
+    setSavedId(subcontractor.id)
+    setTimeout(() => setSavedId((id) => (id === subcontractor.id ? null : id)), 2000)
     load()
   }
 
@@ -225,18 +233,23 @@ export default function PaymentsTab({ contractorId }: { contractorId: string }) 
 
   const handleCreateReturn = async () => {
     setSaving(true)
-    // Finalise any payments with amounts entered for this month
+    // Save (or create) and finalise every row with an amount entered this
+    // month — including ones never explicitly clicked "Save" — so nothing
+    // typed in gets silently left out of the return.
     const toFinalise = subcontractors.filter((s) => {
       const row = draft[s.id]
       return row && calcFor(s, row).totalGross > 0
     })
     for (const s of toFinalise) {
+      const row = draft[s.id] ?? emptyDraftRow
       const existing = payments[s.id]
-      if (existing && !existing.finalised) {
-        await supabase
-          .from('cis_payments')
-          .update({ finalised: true, finalised_at: new Date().toISOString() })
-          .eq('id', existing.id)
+      const payload = { ...buildPaymentPayload(s, row), finalised: true, finalised_at: new Date().toISOString() }
+      if (existing) {
+        if (!existing.finalised) {
+          await supabase.from('cis_payments').update(payload).eq('id', existing.id)
+        }
+      } else {
+        await supabase.from('cis_payments').insert(payload)
       }
     }
 
@@ -461,6 +474,8 @@ export default function PaymentsTab({ contractorId }: { contractorId: string }) 
                           Reopen
                         </button>
                       </span>
+                    ) : savedId === s.id ? (
+                      <span className="text-xs text-green-600">Saved ✓</span>
                     ) : (
                       <button
                         onClick={() => handleSaveRow(s)}
